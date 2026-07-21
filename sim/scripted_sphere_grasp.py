@@ -23,6 +23,7 @@ IK_POSITION_TOLERANCE_METERS = 0.005
 IK_ORIENTATION_TOLERANCE = 0.10
 IK_DAMPING = 0.05
 IK_MAX_JOINT_STEP = 0.05
+IK_ORIENTATION_WEIGHT = 0.35
 GRIPPER_MOVE_STEPS = 90
 GRIPPER_OPEN_PRESET_FRACTION = 1.0
 GRIPPER_HOLD_STEPS = 30
@@ -167,7 +168,7 @@ def resolve_tcp_link(robot: Articulation) -> tuple[int, str, str]:
 
 
 def estimate_finger_length(stage: object, meters_per_unit: float) -> float:
-    """Estimate fixed-finger reach from the TCP origin along local +X."""
+    """Estimate fixed-finger reach and return it in stage units."""
     tcp_prim = stage.GetPrimAtPath(TCP_LINK_PATH)
     cache = UsdGeom.BBoxCache(
         Usd.TimeCode.Default(),
@@ -177,21 +178,25 @@ def estimate_finger_length(stage: object, meters_per_unit: float) -> float:
     local_range = cache.ComputeLocalBound(tcp_prim).ComputeAlignedRange()
     minimum = np.asarray(local_range.GetMin(), dtype=np.float64)
     maximum = np.asarray(local_range.GetMax(), dtype=np.float64)
-    finger_length = float(maximum[0])
-    if not np.isfinite(finger_length) or finger_length <= 0.0:
+    finger_length_meters = float(maximum[0])
+    if not np.isfinite(finger_length_meters) or finger_length_meters <= 0.0:
         raise RuntimeError(
             f"Invalid fixed-finger +X reach from {TCP_LINK_PATH}: "
             f"bounds min={minimum.tolist()} max={maximum.tolist()}"
         )
+    # This asset's gripper mesh bounds are returned in authored meters even
+    # when the containing stage uses centimeters. IK positions use stage units.
+    finger_length_stage_units = finger_length_meters / meters_per_unit
     print(
-        f"[FINGER] local geometry bounds: min={minimum.tolist()} "
+        f"[FINGER] local geometry bounds (meters): min={minimum.tolist()} "
         f"max={maximum.tolist()}"
     )
     print(
-        f"[FINGER] estimated +X length={finger_length * meters_per_unit:.6f} m; "
-        f"virtual grasp offset={VIRTUAL_GRASP_FRACTION * finger_length * meters_per_unit:.6f} m"
+        f"[FINGER] estimated +X length={finger_length_meters:.6f} m "
+        f"({finger_length_stage_units:.6f} stage units); virtual grasp offset="
+        f"{VIRTUAL_GRASP_FRACTION * finger_length_meters:.6f} m"
     )
-    return finger_length
+    return finger_length_stage_units
 
 
 def sphere_world_radius(stage: object) -> float:
@@ -231,28 +236,19 @@ def rotate_vector_wxyz(orientation: np.ndarray, vector: np.ndarray) -> np.ndarra
 def build_grasp_targets(
     sphere_position: np.ndarray,
     sphere_radius: float,
-    finger_length: float,
     meters_per_unit: float,
 ) -> list[CartesianTarget]:
     orientation = top_down_orientation()
     pre_grasp_clearance = PRE_GRASP_CLEARANCE_METERS / meters_per_unit
     lift_distance = LIFT_DISTANCE_METERS / meters_per_unit
-    finger_offset_local = (
-        np.asarray(FINGER_AXIS_LOCAL, dtype=np.float64)
-        * VIRTUAL_GRASP_FRACTION
-        * finger_length
-    )
-    finger_offset_world = rotate_vector_wxyz(orientation, finger_offset_local)
-    # virtual_grasp_world = tcp_world + R_tcp_world @ finger_offset_local
-    # Therefore the TCP target is the desired virtual point minus that offset.
-    grasp = sphere_position - finger_offset_world
+    # These are virtual-grasp-point targets, not TCP-origin targets. The TCP
+    # position needed to realize them changes with the finger orientation and
+    # is handled inside the IK iteration.
+    grasp = sphere_position.copy()
     pre_grasp = grasp + np.array(
         [0.0, 0.0, sphere_radius + pre_grasp_clearance], dtype=np.float64
     )
     lift = grasp + np.array([0.0, 0.0, lift_distance], dtype=np.float64)
-    print(f"[PLAN] finger offset local: {finger_offset_local.tolist()}")
-    print(f"[PLAN] finger offset world: {finger_offset_world.tolist()}")
-    print(f"[PLAN] virtual grasp point at grasp: {(grasp + finger_offset_world).tolist()}")
     targets = [
         CartesianTarget("pre_grasp", pre_grasp, orientation),
         CartesianTarget("grasp", grasp, orientation),
@@ -266,28 +262,39 @@ def build_grasp_targets(
     return targets
 
 
-def quaternion_error(goal: np.ndarray, current: np.ndarray) -> np.ndarray:
-    goal = goal / np.linalg.norm(goal)
-    current = current / np.linalg.norm(current)
-    cw, cx, cy, cz = current
-    current_conjugate = np.array([cw, -cx, -cy, -cz])
-    aw, ax, ay, az = goal
-    bw, bx, by, bz = current_conjugate
-    difference = np.array(
-        [
-            aw * bw - ax * bx - ay * by - az * bz,
-            aw * bx + ax * bw + ay * bz - az * by,
-            aw * by - ax * bz + ay * bw + az * bx,
-            aw * bz + ax * by - ay * bx + az * bw,
-        ],
-        dtype=np.float64,
-    )
-    return difference[1:] * np.sign(difference[0] or 1.0)
+def cross_product_matrix(vector: np.ndarray) -> np.ndarray:
+    """Return the matrix S such that S @ other == vector x other."""
+    x, y, z = vector
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
 
 
-def orientation_distance(goal: np.ndarray, current: np.ndarray) -> float:
-    dot = float(np.clip(abs(np.dot(goal, current)), 0.0, 1.0))
-    return 2.0 * float(np.arccos(dot))
+def approach_axis_error(
+    goal_orientation: np.ndarray, current_orientation: np.ndarray
+) -> tuple[np.ndarray, float]:
+    """Return robust two-axis tilt error and the full approach-axis angle."""
+    local_axis = np.asarray(FINGER_AXIS_LOCAL, dtype=np.float64)
+    goal_axis = rotate_vector_wxyz(goal_orientation, local_axis)
+    current_axis = rotate_vector_wxyz(current_orientation, local_axis)
+    cross = np.cross(current_axis, goal_axis)
+    cross_norm = float(np.linalg.norm(cross))
+    dot = float(np.clip(np.dot(current_axis, goal_axis), -1.0, 1.0))
+    angle = float(np.arctan2(cross_norm, dot))
+
+    if cross_norm > 1.0e-8:
+        rotation_axis = cross / cross_norm
+    elif dot < 0.0:
+        # At exactly 180 degrees the cross product cannot select a direction.
+        # Choose a deterministic axis perpendicular to the approach direction.
+        basis = np.eye(3)[int(np.argmin(np.abs(current_axis)))]
+        rotation_axis = np.cross(current_axis, basis)
+        rotation_axis /= np.linalg.norm(rotation_axis)
+        angle = float(np.pi)
+    else:
+        rotation_axis = np.zeros(3, dtype=np.float64)
+
+    # A downward goal only needs world X/Y angular velocity. Omitting Z leaves
+    # roll around the downward approach axis intentionally unconstrained.
+    return (rotation_axis * angle)[:2], angle
 
 
 def jacobian_layout(robot: Articulation, link_index: int) -> tuple[int, int]:
@@ -385,16 +392,25 @@ def verify_lift(
     sphere_after_lift: np.ndarray,
     tcp_before_lift: np.ndarray,
     tcp_after_lift: np.ndarray,
-    finger_offset_world: np.ndarray,
+    finger_offset_local: np.ndarray,
+    tcp_before_orientation: np.ndarray,
+    tcp_after_orientation: np.ndarray,
     meters_per_unit: float,
 ) -> bool:
     sphere_delta = (sphere_after_lift - sphere_before_lift) * meters_per_unit
-    tcp_delta = (tcp_after_lift - tcp_before_lift) * meters_per_unit
-    virtual_grasp_after_lift = tcp_after_lift + finger_offset_world
+    virtual_grasp_before_lift = tcp_before_lift + rotate_vector_wxyz(
+        tcp_before_orientation, finger_offset_local
+    )
+    virtual_grasp_after_lift = tcp_after_lift + rotate_vector_wxyz(
+        tcp_after_orientation, finger_offset_local
+    )
+    virtual_grasp_delta = (
+        virtual_grasp_after_lift - virtual_grasp_before_lift
+    ) * meters_per_unit
     grasp_sphere_distance = float(
         np.linalg.norm(sphere_after_lift - virtual_grasp_after_lift) * meters_per_unit
     )
-    coupling_error = abs(float(sphere_delta[2] - tcp_delta[2]))
+    coupling_error = abs(float(sphere_delta[2] - virtual_grasp_delta[2]))
 
     rose_enough = float(sphere_delta[2]) >= MIN_SUCCESSFUL_LIFT_METERS
     moved_with_tcp = coupling_error <= MAX_LIFT_COUPLING_ERROR_METERS
@@ -402,7 +418,7 @@ def verify_lift(
     success = rose_enough and moved_with_tcp and remains_near_grasp
 
     print(f"[VERIFY] sphere lift delta meters: {sphere_delta.tolist()}")
-    print(f"[VERIFY] TCP lift delta meters: {tcp_delta.tolist()}")
+    print(f"[VERIFY] virtual grasp lift delta meters: {virtual_grasp_delta.tolist()}")
     print(f"[VERIFY] vertical coupling error meters: {coupling_error:.6f}")
     print(
         "[VERIFY] final virtual-grasp/sphere distance meters: "
@@ -425,6 +441,7 @@ def solve_cartesian_target(
     target: CartesianTarget,
     lower_limits: np.ndarray,
     upper_limits: np.ndarray,
+    finger_offset_local: np.ndarray,
     meters_per_unit: float,
 ) -> tuple[bool, np.ndarray, str]:
     arm_dof_indices = [
@@ -437,6 +454,10 @@ def solve_cartesian_target(
         f"link_row={jacobian_row} joint_column_offset={joint_column_offset}"
     )
     seed = as_numpy(robot.get_dof_positions())[0].copy()
+    limit_clipping_count = 0
+    final_position_norm = float("inf")
+    final_angle_error = float("inf")
+    final_task_jacobian: np.ndarray | None = None
 
     for orientation_mode, goal_orientation in (("top-down", target.orientation),):
         for step in range(1, IK_MAX_STEPS + 1):
@@ -444,18 +465,19 @@ def solve_cartesian_target(
             tcp_positions, tcp_orientations = tcp.get_world_poses()
             current_position = as_numpy(tcp_positions)[0]
             current_orientation = as_numpy(tcp_orientations)[0]
-            position_error = target.position - current_position
+            finger_offset_world = rotate_vector_wxyz(
+                current_orientation, finger_offset_local
+            )
+            virtual_grasp_position = current_position + finger_offset_world
+            position_error = target.position - virtual_grasp_position
             position_error_meters = position_error * meters_per_unit
             position_norm = float(np.linalg.norm(position_error_meters))
-            angle_error = (
-                orientation_distance(goal_orientation, current_orientation)
-                if goal_orientation is not None
-                else 0.0
+            tilt_error, angle_error = approach_axis_error(
+                goal_orientation, current_orientation
             )
 
             if position_norm <= IK_POSITION_TOLERANCE_METERS and (
-                goal_orientation is None
-                or angle_error <= IK_ORIENTATION_TOLERANCE
+                angle_error <= IK_ORIENTATION_TOLERANCE
             ):
                 solved = as_numpy(robot.get_dof_positions())[0]
                 print(
@@ -469,15 +491,21 @@ def solve_cartesian_target(
             jacobian = as_numpy(robot.get_jacobian_matrices())[
                 0, jacobian_row, :, :
             ][:, [joint_column_offset + index for index in arm_dof_indices]]
-            jacobian[:3, :] *= meters_per_unit
-            task_error = np.concatenate(
-                [
-                    position_error_meters,
-                    0.35 * quaternion_error(goal_orientation, current_orientation),
-                ]
+            linear_jacobian = jacobian[:3, :] * meters_per_unit
+            angular_jacobian = jacobian[3:, :]
+            offset_meters = finger_offset_world * meters_per_unit
+            virtual_point_jacobian = linear_jacobian - (
+                cross_product_matrix(offset_meters) @ angular_jacobian
             )
-            task_jacobian = jacobian.copy()
-            task_jacobian[3:, :] *= 0.35
+            task_error = np.concatenate([position_error_meters, tilt_error])
+            task_jacobian = np.vstack(
+                [virtual_point_jacobian, angular_jacobian[:2, :]]
+            )
+            task_error[3:] *= IK_ORIENTATION_WEIGHT
+            task_jacobian[3:, :] *= IK_ORIENTATION_WEIGHT
+            final_position_norm = position_norm
+            final_angle_error = angle_error
+            final_task_jacobian = task_jacobian.copy()
 
             transpose = task_jacobian.T
             damping = np.eye(task_jacobian.shape[0]) * (IK_DAMPING**2)
@@ -491,7 +519,10 @@ def solve_cartesian_target(
 
             next_dofs = current_dofs.copy()
             next_dofs[arm_dof_indices] += delta
-            next_dofs = np.clip(next_dofs, lower_limits, upper_limits)
+            unclipped_dofs = next_dofs.copy()
+            next_dofs = np.clip(unclipped_dofs, lower_limits, upper_limits)
+            if np.any(next_dofs[arm_dof_indices] != unclipped_dofs[arm_dof_indices]):
+                limit_clipping_count += 1
             robot.set_dof_position_targets(
                 next_dofs[arm_dof_indices], dof_indices=arm_dof_indices
             )
@@ -500,6 +531,23 @@ def solve_cartesian_target(
         print(
             f"[IK] {target.name}: FAILED mode={orientation_mode} "
             f"after {IK_MAX_STEPS} steps"
+        )
+        singular_values = (
+            np.linalg.svd(final_task_jacobian, compute_uv=False)
+            if final_task_jacobian is not None
+            else np.array([], dtype=np.float64)
+        )
+        jacobian_rank = (
+            int(np.linalg.matrix_rank(final_task_jacobian))
+            if final_task_jacobian is not None
+            else 0
+        )
+        print(
+            f"[IK] {target.name}: final_position_error_m={final_position_norm:.6f} "
+            f"final_approach_axis_angle_rad={final_angle_error:.6f} "
+            f"joint_limit_clipping_steps={limit_clipping_count} "
+            f"jacobian_rank={jacobian_rank} "
+            f"singular_values={singular_values.tolist()}"
         )
 
     drive_to_joint_positions(robot, seed, arm_dof_indices)
@@ -587,16 +635,14 @@ def main() -> None:
     )
 
     sphere_radius = sphere_world_radius(stage)
-    finger_length = estimate_finger_length(stage, meters_per_unit)
-    finger_offset_world = rotate_vector_wxyz(
-        top_down_orientation(),
+    finger_length_stage_units = estimate_finger_length(stage, meters_per_unit)
+    finger_offset_local = (
         np.asarray(FINGER_AXIS_LOCAL, dtype=np.float64)
         * VIRTUAL_GRASP_FRACTION
-        * finger_length,
+        * finger_length_stage_units
     )
-    targets = build_grasp_targets(
-        sphere_position, sphere_radius, finger_length, meters_per_unit
-    )
+    print(f"[PLAN] finger offset local: {finger_offset_local.tolist()}")
+    targets = build_grasp_targets(sphere_position, sphere_radius, meters_per_unit)
     lower_limits, upper_limits = robot.get_dof_limits()
     lower_limits = as_numpy(lower_limits)[0]
     upper_limits = as_numpy(upper_limits)[0]
@@ -619,6 +665,7 @@ def main() -> None:
         targets[0],
         lower_limits,
         upper_limits,
+        finger_offset_local,
         meters_per_unit,
     )
     if not solved:
@@ -633,6 +680,7 @@ def main() -> None:
         targets[1],
         lower_limits,
         upper_limits,
+        finger_offset_local,
         meters_per_unit,
     )
     if not solved:
@@ -649,7 +697,9 @@ def main() -> None:
         GRIPPER_HOLD_STEPS,
     )
     sphere_before_lift = world_position(sphere)
-    tcp_before_lift = world_position(tcp)
+    tcp_before_positions, tcp_before_orientations = tcp.get_world_poses()
+    tcp_before_lift = as_numpy(tcp_before_positions)[0].copy()
+    tcp_before_orientation = as_numpy(tcp_before_orientations)[0].copy()
     print(f"[SPHERE] position after close: {sphere_before_lift.tolist()}")
 
     solved, lift_joints, _ = solve_cartesian_target(
@@ -660,6 +710,7 @@ def main() -> None:
         targets[2],
         lower_limits,
         upper_limits,
+        finger_offset_local,
         meters_per_unit,
     )
     if not solved:
@@ -675,7 +726,9 @@ def main() -> None:
         POST_LIFT_HOLD_STEPS,
     )
     sphere_after_lift = world_position(sphere)
-    tcp_after_lift = world_position(tcp)
+    tcp_after_positions, tcp_after_orientations = tcp.get_world_poses()
+    tcp_after_lift = as_numpy(tcp_after_positions)[0].copy()
+    tcp_after_orientation = as_numpy(tcp_after_orientations)[0].copy()
     print(f"[SPHERE] position after lift: {sphere_after_lift.tolist()}")
 
     if not verify_lift(
@@ -683,7 +736,9 @@ def main() -> None:
         sphere_after_lift,
         tcp_before_lift,
         tcp_after_lift,
-        finger_offset_world,
+        finger_offset_local,
+        tcp_before_orientation,
+        tcp_after_orientation,
         meters_per_unit,
     ):
         raise RuntimeError("Sphere did not rise with the gripper")
