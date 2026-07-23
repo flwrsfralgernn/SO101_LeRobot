@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import importlib.metadata
 import json
 import math
@@ -62,7 +63,7 @@ GRIPPER_LOWER_LIMIT_TOLERANCE_RAD = 0.01
 GRASP_SUCCESS_HOLD_STEPS = 60
 IK_MAX_ITERATIONS = 100
 IK_POSITION_TOLERANCE_M = 0.0005
-IK_APPLY_STOP_DISTANCE_M = 0.001
+DEFAULT_APPROACH_STOP_DISTANCE_MM = 7.0
 IK_COMMAND_STEPS = 300
 IK_SETTLE_MAX_STEPS = 300
 IK_SETTLED_FRAMES = 10
@@ -230,6 +231,10 @@ if "--lerobot-worker" in sys.argv:
     raise SystemExit(lerobot_worker_main())
 
 
+def print(*args: object, **kwargs: object) -> None:
+    """Suppress normal script diagnostics during contact-point debugging."""
+
+
 from isaacsim import SimulationApp  # noqa: E402
 
 
@@ -266,9 +271,24 @@ def parse_args() -> argparse.Namespace:
             f"(default: {DEFAULT_LEROBOT_PYTHON})"
         ),
     )
+    parser.add_argument(
+        "--approach-stop-distance-mm",
+        type=float,
+        default=DEFAULT_APPROACH_STOP_DISTANCE_MM,
+        help=(
+            "Stop arm movement when the authored gripper contact point is "
+            "within this distance of the IK approach point "
+            f"(default: {DEFAULT_APPROACH_STOP_DISTANCE_MM:.1f} mm)"
+        ),
+    )
     args, _ = parser.parse_known_args()
     if args.settle_steps < 0:
         parser.error("--settle-steps cannot be negative")
+    if (
+        not math.isfinite(args.approach_stop_distance_mm)
+        or args.approach_stop_distance_mm <= 0.0
+    ):
+        parser.error("--approach-stop-distance-mm must be a positive number")
     return args
 
 
@@ -699,8 +719,7 @@ class SphereFingerContactTracker:
 
 def apply_position_only_ik(
     robot: Articulation,
-    gripper: XformPrim,
-    fingertip_offset_stage_units: np.ndarray,
+    contact_point: XformPrim,
     target_world_stage_units: np.ndarray,
     meters_per_unit: float,
     ik_result: dict[str, object],
@@ -722,8 +741,14 @@ def apply_position_only_ik(
     target_world_m = (
         np.asarray(target_world_stage_units, dtype=np.float64) * meters_per_unit
     )
+    stop_distance_m = ARGS.approach_stop_distance_mm / 1000.0
     approach_reached = False
     applied_steps = 0
+
+    print(
+        "  Contact-point stop distance: "
+        f"{stop_distance_m * 1000.0:.3f} mm"
+    )
 
     # Send a smooth joint-space trajectory through the articulation's ordinary
     # position drives. Stop immediately once the authored fixed-finger contact
@@ -738,37 +763,42 @@ def apply_position_only_ik(
         robot.set_dof_position_targets(command, dof_indices=arm_indices)
         SIMULATION_APP.update()
 
-        gripper_positions, gripper_orientations = gripper.get_world_poses()
-        gripper_position = as_numpy(gripper_positions)[0]
-        gripper_orientation = as_numpy(gripper_orientations)[0]
-        actual_fingertip_stage_units = gripper_position + rotate_vector_wxyz(
-            gripper_orientation,
-            fingertip_offset_stage_units,
-        )
+        contact_positions, _ = contact_point.get_world_poses()
+        actual_fingertip_stage_units = as_numpy(contact_positions)[0]
         fingertip_error_m = float(
             np.linalg.norm(
                 actual_fingertip_stage_units * meters_per_unit - target_world_m
             )
         )
         applied_steps = step
-        if fingertip_error_m <= IK_APPLY_STOP_DISTANCE_M:
+        if fingertip_error_m <= stop_distance_m:
             approach_reached = True
-            print(
-                "  Contact-point approach threshold reached at "
-                f"step {step}: error={fingertip_error_m * 1000.0:.3f} mm"
+
+            # The last interpolated command can be slightly ahead of the
+            # measured pose. Replace it with the live arm pose so the position
+            # drives do not continue advancing after this loop terminates.
+            actual_all = as_numpy(
+                robot.get_dof_positions()
+            )[0].astype(np.float64)
+            stopped_joints_rad = actual_all[arm_indices].copy()
+            robot.set_dof_position_targets(
+                stopped_joints_rad,
+                dof_indices=arm_indices,
+            )
+            builtins.print(
+                "[CONTACT POINT ACTIVATED] "
+                f"step={step}, "
+                f"distance={fingertip_error_m * 1000.0:.3f} mm, "
+                f"threshold={stop_distance_m * 1000.0:.3f} mm",
+                flush=True,
             )
             break
 
     actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
     actual_joints_rad = actual_all[arm_indices]
     joint_errors_rad = actual_joints_rad - solved_joints_rad
-    gripper_positions, gripper_orientations = gripper.get_world_poses()
-    gripper_position = as_numpy(gripper_positions)[0]
-    gripper_orientation = as_numpy(gripper_orientations)[0]
-    actual_fingertip_stage_units = gripper_position + rotate_vector_wxyz(
-        gripper_orientation,
-        fingertip_offset_stage_units,
-    )
+    contact_positions, _ = contact_point.get_world_poses()
+    actual_fingertip_stage_units = as_numpy(contact_positions)[0]
     actual_fingertip_m = actual_fingertip_stage_units * meters_per_unit
     fingertip_error_m = float(
         np.linalg.norm(actual_fingertip_m - target_world_m)
@@ -777,7 +807,7 @@ def apply_position_only_ik(
     print(f"  Applied approach steps: {applied_steps}")
     print(
         "  Approach stop threshold: "
-        f"{IK_APPLY_STOP_DISTANCE_M * 1000.0:.3f} mm"
+        f"{stop_distance_m * 1000.0:.3f} mm"
     )
     print(f"  Actual joints (rad): {actual_joints_rad.tolist()}")
     print(f"  Joint tracking errors (rad): {joint_errors_rad.tolist()}")
@@ -1238,8 +1268,7 @@ def main() -> None:
     )
     arm_hold_target_rad = apply_position_only_ik(
         robot=robot,
-        gripper=gripper,
-        fingertip_offset_stage_units=contact_point_local_stage_units,
+        contact_point=contact_point,
         target_world_stage_units=sphere_grasp_point,
         meters_per_unit=meters_per_unit,
         ik_result=ik_result,
