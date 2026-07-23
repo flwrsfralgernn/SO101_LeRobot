@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Align an SO-101 and select a perpendicular-axis sphere grasp point."""
+"""Align an SO-101, grasp a sphere, and lift it after grasp stabilization."""
 
 from __future__ import annotations
 
@@ -57,10 +57,12 @@ GRIPPER_PRESET_POSITION_RAD = 1.5
 GRIPPER_DOF_INDEX = 5
 GRIPPER_CLOSE_PROGRESS_INTERVAL_STEPS = 30
 GRASP_STABLE_CONTACT_FRAMES = 10
-GRIPPER_STALLED_VELOCITY_THRESHOLD_RAD_S = 0.01
 GRIPPER_REMAINING_CLOSE_GAP_THRESHOLD_RAD = 0.05
 GRIPPER_LOWER_LIMIT_TOLERANCE_RAD = 0.01
-GRASP_SUCCESS_HOLD_STEPS = 60
+DEFAULT_LIFT_HEIGHT_MM = 100.0
+DEFAULT_LIFT_STOP_DISTANCE_MM = 7.0
+LIFT_COMMAND_STEPS = 300
+LIFT_CONTACT_LOSS_TOLERANCE_FRAMES = 5
 IK_MAX_ITERATIONS = 100
 IK_POSITION_TOLERANCE_M = 0.0005
 DEFAULT_APPROACH_STOP_DISTANCE_MM = 7.0
@@ -70,7 +72,7 @@ IK_SETTLED_FRAMES = 10
 IK_SETTLED_ARM_VELOCITY_THRESHOLD_RAD_S = 0.01
 DEBUG_POINT_WAIT_STEPS = 45
 # Keep the contact point just outside the object until the grasp motion begins.
-SPHERE_SURFACE_CLEARANCE_M = 0.005
+SPHERE_SURFACE_CLEARANCE_M = 0.0
 
 
 def lerobot_worker_main() -> int:
@@ -231,10 +233,6 @@ if "--lerobot-worker" in sys.argv:
     raise SystemExit(lerobot_worker_main())
 
 
-def print(*args: object, **kwargs: object) -> None:
-    """Suppress normal script diagnostics during contact-point debugging."""
-
-
 from isaacsim import SimulationApp  # noqa: E402
 
 
@@ -281,6 +279,25 @@ def parse_args() -> argparse.Namespace:
             f"(default: {DEFAULT_APPROACH_STOP_DISTANCE_MM:.1f} mm)"
         ),
     )
+    parser.add_argument(
+        "--lift-height-mm",
+        type=float,
+        default=DEFAULT_LIFT_HEIGHT_MM,
+        help=(
+            "Vertical distance to lift the grasped sphere "
+            f"(default: {DEFAULT_LIFT_HEIGHT_MM:.1f} mm)"
+        ),
+    )
+    parser.add_argument(
+        "--lift-stop-distance-mm",
+        type=float,
+        default=DEFAULT_LIFT_STOP_DISTANCE_MM,
+        help=(
+            "Stop the lift when the authored gripper contact point is within "
+            "this distance of the lift target "
+            f"(default: {DEFAULT_LIFT_STOP_DISTANCE_MM:.1f} mm)"
+        ),
+    )
     args, _ = parser.parse_known_args()
     if args.settle_steps < 0:
         parser.error("--settle-steps cannot be negative")
@@ -289,6 +306,16 @@ def parse_args() -> argparse.Namespace:
         or args.approach_stop_distance_mm <= 0.0
     ):
         parser.error("--approach-stop-distance-mm must be a positive number")
+    if (
+        not math.isfinite(args.lift_height_mm)
+        or args.lift_height_mm <= 0.0
+    ):
+        parser.error("--lift-height-mm must be a positive number")
+    if (
+        not math.isfinite(args.lift_stop_distance_mm)
+        or args.lift_stop_distance_mm <= 0.0
+    ):
+        parser.error("--lift-stop-distance-mm must be a positive number")
     return args
 
 
@@ -827,8 +854,8 @@ def close_gripper_until_stable_grasp(
     robot: Articulation,
     arm_hold_target_rad: np.ndarray,
     contact_tracker: SphereFingerContactTracker,
-) -> None:
-    """Close input 5 until a stable two-finger, contact-induced stall."""
+) -> float:
+    """Close until stable and keep the fully closed target active."""
     arm_indices = resolve_arm_dof_indices(robot)
     arm_target_rad = np.asarray(arm_hold_target_rad, dtype=np.float64)
     lower_limits, _ = robot.get_dof_limits()
@@ -843,7 +870,6 @@ def close_gripper_until_stable_grasp(
     print(
         "  Stable grasp requirements: "
         f"{GRASP_STABLE_CONTACT_FRAMES} consecutive physics frames, "
-        f"|velocity| <= {GRIPPER_STALLED_VELOCITY_THRESHOLD_RAD_S:.3f} rad/s, "
         f"remaining close gap >= {GRIPPER_REMAINING_CLOSE_GAP_THRESHOLD_RAD:.3f} rad"
     )
 
@@ -866,17 +892,12 @@ def close_gripper_until_stable_grasp(
         target_gap_rad = actual_position_rad - commanded_target_rad
         fixed_contact = contact_tracker.fixed_finger_in_contact
         moving_contact = contact_tracker.moving_finger_in_contact
-        stalled = (
-            abs(actual_velocity_rad_s)
-            <= GRIPPER_STALLED_VELOCITY_THRESHOLD_RAD_S
-        )
         target_still_farther_closed = (
             target_gap_rad >= GRIPPER_REMAINING_CLOSE_GAP_THRESHOLD_RAD
         )
         qualifies = (
             fixed_contact
             and moving_contact
-            and stalled
             and target_still_farther_closed
         )
 
@@ -895,18 +916,14 @@ def close_gripper_until_stable_grasp(
                 print(
                     f"  Consecutive qualifying frames: {qualifying_frames}"
                 )
-                for _ in range(GRASP_SUCCESS_HOLD_STEPS):
-                    robot.set_dof_position_targets(
-                        arm_target_rad, dof_indices=arm_indices
-                    )
-                    robot.set_dof_position_targets(
-                        [closed_target_rad], dof_indices=[GRIPPER_DOF_INDEX]
-                    )
-                    SIMULATION_APP.update()
-                print(
-                    f"Grasp held for {GRASP_SUCCESS_HOLD_STEPS} physics frames."
+
+                builtins.print(
+                    "[GRASP COMPLETED] Stable two-finger grasp finalized; "
+                    f"keeping closed gripper target={closed_target_rad:.6f} rad "
+                    "to maintain squeeze force during lift.",
+                    flush=True,
                 )
-                return
+                return closed_target_rad
         elif qualifying_frames:
             print(
                 "  Stable-grasp counter reset after "
@@ -938,6 +955,129 @@ def close_gripper_until_stable_grasp(
             )
 
     raise RuntimeError("Simulation stopped before a stable grasp was detected")
+
+
+def lift_grasped_sphere(
+    robot: Articulation,
+    contact_point: XformPrim,
+    target_world_stage_units: np.ndarray,
+    meters_per_unit: float,
+    ik_result: dict[str, object],
+    gripper_target_rad: float,
+    contact_tracker: SphereFingerContactTracker,
+) -> np.ndarray:
+    """Lift to a vertical fingertip target while holding the finalized grasp."""
+    arm_indices = resolve_arm_dof_indices(robot)
+    solved_joints_deg = np.asarray(
+        ik_result["solved_joints_deg"], dtype=np.float64
+    )
+    solved_joints_rad = np.deg2rad(solved_joints_deg)
+    current_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
+    start_joints_rad = current_all[arm_indices].copy()
+    target_world_m = (
+        np.asarray(target_world_stage_units, dtype=np.float64) * meters_per_unit
+    )
+    stop_distance_m = ARGS.lift_stop_distance_mm / 1000.0
+    contact_loss_frames = 0
+
+    print()
+    print("Lifting grasped sphere:")
+    print(f"  Start joints (rad): {start_joints_rad.tolist()}")
+    print(f"  Target joints (rad): {solved_joints_rad.tolist()}")
+    print(f"  Constant gripper target (rad): {gripper_target_rad:.6f}")
+    print(f"  Lift height: {ARGS.lift_height_mm:.3f} mm")
+    print(f"  Lift stop distance: {ARGS.lift_stop_distance_mm:.3f} mm")
+
+    for step in range(1, LIFT_COMMAND_STEPS + 1):
+        fraction = step / LIFT_COMMAND_STEPS
+        blend = fraction * fraction * (3.0 - 2.0 * fraction)
+        arm_command = start_joints_rad + blend * (
+            solved_joints_rad - start_joints_rad
+        )
+        robot.set_dof_position_targets(
+            arm_command,
+            dof_indices=arm_indices,
+        )
+        robot.set_dof_position_targets(
+            [gripper_target_rad],
+            dof_indices=[GRIPPER_DOF_INDEX],
+        )
+        SIMULATION_APP.update()
+
+        fixed_contact = contact_tracker.fixed_finger_in_contact
+        moving_contact = contact_tracker.moving_finger_in_contact
+        if fixed_contact and moving_contact:
+            contact_loss_frames = 0
+        else:
+            contact_loss_frames += 1
+            if contact_loss_frames >= LIFT_CONTACT_LOSS_TOLERANCE_FRAMES:
+                actual_all = as_numpy(
+                    robot.get_dof_positions()
+                )[0].astype(np.float64)
+                robot.set_dof_position_targets(
+                    actual_all[arm_indices],
+                    dof_indices=arm_indices,
+                )
+                robot.set_dof_position_targets(
+                    [gripper_target_rad],
+                    dof_indices=[GRIPPER_DOF_INDEX],
+                )
+                raise RuntimeError(
+                    "Stable grasp was lost during lift: "
+                    f"step={step}, fixed_contact={fixed_contact}, "
+                    f"moving_contact={moving_contact}"
+                )
+
+        contact_positions, _ = contact_point.get_world_poses()
+        actual_fingertip_stage_units = as_numpy(contact_positions)[0]
+        fingertip_error_m = float(
+            np.linalg.norm(
+                actual_fingertip_stage_units * meters_per_unit - target_world_m
+            )
+        )
+        if fingertip_error_m <= stop_distance_m:
+            actual_all = as_numpy(
+                robot.get_dof_positions()
+            )[0].astype(np.float64)
+            lifted_arm_hold_rad = actual_all[arm_indices].copy()
+            robot.set_dof_position_targets(
+                lifted_arm_hold_rad,
+                dof_indices=arm_indices,
+            )
+            robot.set_dof_position_targets(
+                [gripper_target_rad],
+                dof_indices=[GRIPPER_DOF_INDEX],
+            )
+            builtins.print(
+                "[LIFT COMPLETED] "
+                f"step={step}, "
+                f"distance={fingertip_error_m * 1000.0:.3f} mm, "
+                f"threshold={stop_distance_m * 1000.0:.3f} mm",
+                flush=True,
+            )
+            return lifted_arm_hold_rad
+
+    actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
+    robot.set_dof_position_targets(
+        actual_all[arm_indices],
+        dof_indices=arm_indices,
+    )
+    robot.set_dof_position_targets(
+        [gripper_target_rad],
+        dof_indices=[GRIPPER_DOF_INDEX],
+    )
+    contact_positions, _ = contact_point.get_world_poses()
+    actual_fingertip_stage_units = as_numpy(contact_positions)[0]
+    fingertip_error_m = float(
+        np.linalg.norm(
+            actual_fingertip_stage_units * meters_per_unit - target_world_m
+        )
+    )
+    raise RuntimeError(
+        "Lift did not reach its target before the command-step limit: "
+        f"steps={LIFT_COMMAND_STEPS}, "
+        f"remaining_distance={fingertip_error_m * 1000.0:.3f} mm"
+    )
 
 
 def as_numpy(value: object) -> np.ndarray:
@@ -1273,9 +1413,46 @@ def main() -> None:
         meters_per_unit=meters_per_unit,
         ik_result=ik_result,
     )
-    close_gripper_until_stable_grasp(
+    gripper_close_target_rad = close_gripper_until_stable_grasp(
         robot=robot,
         arm_hold_target_rad=arm_hold_target_rad,
+        contact_tracker=contact_tracker,
+    )
+
+    # Start the lift from the live post-grasp fingertip position. This makes
+    # the requested displacement purely vertical even if the arm stopped
+    # slightly short of its original approach target.
+    contact_positions, _ = contact_point.get_world_poses()
+    lift_start_world = as_numpy(contact_positions)[0].astype(np.float64)
+    lift_target_world = lift_start_world.copy()
+    lift_target_world[2] += (
+        ARGS.lift_height_mm / 1000.0 / meters_per_unit
+    )
+    print()
+    print_point(
+        "Lift start point (world)",
+        lift_start_world * meters_per_unit,
+    )
+    print_point(
+        "Lift target point (world)",
+        lift_target_world * meters_per_unit,
+    )
+
+    lift_ik_result = calculate_position_only_ik(
+        stage=stage,
+        robot=robot,
+        base_link=base_link,
+        fingertip_offset_stage_units=contact_point_local_stage_units,
+        target_world_stage_units=lift_target_world,
+        meters_per_unit=meters_per_unit,
+    )
+    lift_grasped_sphere(
+        robot=robot,
+        contact_point=contact_point,
+        target_world_stage_units=lift_target_world,
+        meters_per_unit=meters_per_unit,
+        ik_result=lift_ik_result,
+        gripper_target_rad=gripper_close_target_rad,
         contact_tracker=contact_tracker,
     )
     contact_tracker.print_status()
