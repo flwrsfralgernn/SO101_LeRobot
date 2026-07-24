@@ -1,0 +1,101 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.2"
+    }
+    defaultPrim = "Elrobot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpzh818sm_/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/usdex_elrobot_follower/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/temp_elrobot_follower/elrobot_follower.usd
+
+
+Generated from Composed Stage of root layer /home/rog/Downloads/so101_lerobot/sim/robots/elrobot_follower/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+over "Elrobot"
+{
+    over "Physics"
+    {
+        over "rev_motor_01" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_02" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_03" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_04" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_05" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_06" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_07" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_08" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_08_1" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+
+        over "rev_motor_08_2" (
+            prepend apiSchemas = ["PhysxJointAPI"]
+        )
+        {
+            float physxJoint:maxJointVelocity = 269.86313
+        }
+    }
+}
+

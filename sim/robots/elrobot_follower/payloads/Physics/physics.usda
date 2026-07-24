@@ -1,0 +1,534 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.2"
+    }
+    defaultPrim = "Elrobot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpzh818sm_/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/usdex_elrobot_follower/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/temp_elrobot_follower/elrobot_follower.usd
+
+
+Generated from Composed Stage of root layer /home/rog/Downloads/so101_lerobot/sim/robots/elrobot_follower/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+over "Elrobot"
+{
+    over "Geometry"
+    {
+        over "base_link" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI", "NewtonArticulationRootAPI", "PhysicsMassAPI"]
+        )
+        {
+            bool newton:selfCollisionEnabled = 0
+            point3f physics:centerOfMass = (4.1532033e-10, 0.013084111, 0.019551044)
+            float3 physics:diagonalInertia = (0.000036, 0.000046055728, 0.00006394427)
+            float physics:mass = 0.06831242
+            quatf physics:principalAxes = (-0.48696452, 0.8734217, 0, 0)
+
+            over "ST3215_1_v1_1" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+            )
+            {
+                point3f physics:centerOfMass = (0.000004076347, 0.022690162, -0.0014235773)
+                float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                float physics:mass = 0.03190666
+                quatf physics:principalAxes = (-0.5, 0.5, 0.5, 0.5)
+
+                over "Joint_01_1" (
+                    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                )
+                {
+                    point3f physics:centerOfMass = (0.00019293358, 0.01053544, -0.0029034063)
+                    float3 physics:diagonalInertia = (0.000008596876, 0.00002, 0.000021403124)
+                    float physics:mass = 0.036024842
+                    quatf physics:principalAxes = (0.57684636, 0.40895998, 0.40895998, 0.57684636)
+
+                    over "ST3215_2_v1_1" (
+                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                    )
+                    {
+                        point3f physics:centerOfMass = (-0.0014235768, -0.00019407288, 0.022689434)
+                        float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                        float physics:mass = 0.03190666
+                        quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+
+                        over "Joint_02_1" (
+                            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                        )
+                        {
+                            point3f physics:centerOfMass = (0.020187292, -0.00036071494, 0.040488865)
+                            float3 physics:diagonalInertia = (0.000017, 0.000024, 0.000034)
+                            float physics:mass = 0.043134194
+                            quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+
+                            over "ST3215_3_v1_1" (
+                                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                            )
+                            {
+                                point3f physics:centerOfMass = (-0.0012258665, -0.0001938389, 0.0227006)
+                                float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                float physics:mass = 0.03190666
+                                quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+
+                                over "Joint_03_v1_1" (
+                                    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                )
+                                {
+                                    point3f physics:centerOfMass = (0.021383489, 0.002597374, 0.028573273)
+                                    float3 physics:diagonalInertia = (0.000011, 0.000014697224, 0.000018302775)
+                                    float physics:mass = 0.037054855
+                                    quatf physics:principalAxes = (0.8030517, -0.5959093, 0, 0)
+
+                                    over "ST3215_4_v1_1" (
+                                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                    )
+                                    {
+                                        point3f physics:centerOfMass = (-0.0014236013, 0.022688802, 0.00021876986)
+                                        float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                        float physics:mass = 0.03190666
+                                        quatf physics:principalAxes = (6.123234e-17, 0.70710677, 0.70710677, 0)
+
+                                        over "Joint_04_v1_1" (
+                                            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                        )
+                                        {
+                                            point3f physics:centerOfMass = (0.020414695, 0.04634775, 0.00047337735)
+                                            float3 physics:diagonalInertia = (0.000020961596, 0.000037, 0.000047038404)
+                                            float physics:mass = 0.0491054
+                                            quatf physics:principalAxes = (0.013570648, 0.70697653, 0.70697653, 0.013570648)
+
+                                            over "ST3215_5_v1_1" (
+                                                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                            )
+                                            {
+                                                point3f physics:centerOfMass = (0.0003830171, -0.0016210054, 0.022431225)
+                                                float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                                float physics:mass = 0.03190666
+                                                quatf physics:principalAxes = (0.70710677, 0, 0.70710677, 0)
+
+                                                over "Joint_05_v1_1" (
+                                                    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                )
+                                                {
+                                                    point3f physics:centerOfMass = (-0.0014511732, 0.014886172, 0.00023918948)
+                                                    float3 physics:diagonalInertia = (0.000003, 0.000005, 0.000005)
+                                                    float physics:mass = 0.015030395
+                                                    quatf physics:principalAxes = (1, 0, 0, 0)
+
+                                                    over "ST3215_6_v1_1" (
+                                                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                    )
+                                                    {
+                                                        point3f physics:centerOfMass = (-0.0012292542, 0.022701208, 0.000017775252)
+                                                        float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                                        float physics:mass = 0.03190666
+                                                        quatf physics:principalAxes = (6.123234e-17, 0.70710677, 0.70710677, 0)
+
+                                                        over "Joint_06_v1_1" (
+                                                            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                        )
+                                                        {
+                                                            point3f physics:centerOfMass = (0.020434033, 0.031976506, 0.00035648135)
+                                                            float3 physics:diagonalInertia = (0.000016, 0.000016, 0.000022)
+                                                            float physics:mass = 0.03727709
+                                                            quatf physics:principalAxes = (1, 0, 0, 0)
+
+                                                            over "ST3215_7_v1_1" (
+                                                                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                            )
+                                                            {
+                                                                point3f physics:centerOfMass = (0.00037315403, -0.0014257132, 0.022445027)
+                                                                float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                                                float physics:mass = 0.03190666
+                                                                quatf physics:principalAxes = (0.70710677, 0, 0.70710677, 0)
+
+                                                                over "Gripper_Base_v1_1" (
+                                                                    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                                )
+                                                                {
+                                                                    point3f physics:centerOfMass = (0.000560525, 0.031919993, -0.0005946932)
+                                                                    float3 physics:diagonalInertia = (0.000022, 0.000029, 0.000031)
+                                                                    float physics:mass = 0.046895456
+                                                                    quatf physics:principalAxes = (1, 0, 0, 0)
+
+                                                                    over "ST3215_8_v1_1" (
+                                                                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                                    )
+                                                                    {
+                                                                        point3f physics:centerOfMass = (-0.0005459234, -0.01892611, -0.012206366)
+                                                                        float3 physics:diagonalInertia = (0.000004, 0.000007, 0.000008)
+                                                                        float physics:mass = 0.03190666
+                                                                        quatf physics:principalAxes = (0.70710677, 0, 0.70710677, 0)
+
+                                                                        over "Gripper_Gear_v1_1" (
+                                                                            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                                        )
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.00006406693, 0.0037564011, -0.000033834214)
+                                                                            float3 physics:diagonalInertia = (0, 0, 0)
+                                                                            float physics:mass = 0.002479084
+                                                                            quatf physics:principalAxes = (1, 0, 0, 0)
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Jaw_02_v1_1" (
+                                                                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                                    )
+                                                                    {
+                                                                        point3f physics:centerOfMass = (-0.3386809, 0.26259217, -0.030316534)
+                                                                        float3 physics:diagonalInertia = (0.000003, 0.000004, 0.000005)
+                                                                        float physics:mass = 0.012492175
+                                                                        quatf physics:principalAxes = (0.70710677, 0, 0.70710677, 0)
+                                                                    }
+
+                                                                    over "Gripper_Jaw_01_v1_1" (
+                                                                        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                                                                    )
+                                                                    {
+                                                                        point3f physics:centerOfMass = (-0.27944183, 0.3053158, 0.04627968)
+                                                                        float3 physics:diagonalInertia = (0.000003, 0.000004, 0.000005)
+                                                                        float physics:mass = 0.012492175
+                                                                        quatf physics:principalAxes = (0.70710677, 0, 0.70710677, 0)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    over "Physics"
+    {
+        def PhysicsRevoluteJoint "rev_motor_01" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1>
+            point3f physics:localPos0 = (0, 0.034904, 0.017505)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.70710677, 0, -0.7070799, -0.006170921)
+            quatf physics:localRot1 = (0.70710677, 0, -0.7070799, -0.006170921)
+            float physics:lowerLimit = -88.86002
+            float physics:upperLimit = 88.86002
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_02" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1>
+            point3f physics:localPos0 = (-0.020293, -0.000308, 0.035233)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.004360491, 0, -0.9999526, -0.00870919)
+            quatf physics:localRot1 = (0.004360491, 0, -0.9999526, -0.00870919)
+            float physics:lowerLimit = -92.37225
+            float physics:upperLimit = 92.37225
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_03" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1>
+            point3f physics:localPos0 = (-0.019985, -0.000309, 0.035408)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.008724399, 0, -0.99992406, -0.008708942)
+            quatf physics:localRot1 = (0.008724399, 0, -0.99992406, -0.008708942)
+            float physics:lowerLimit = -100.897865
+            float physics:upperLimit = 100.897865
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_04" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1>
+            point3f physics:localPos0 = (-0.02029, 0.035229, 0.000662)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.009756465, 0, -0.89823556, 0.43940616)
+            quatf physics:localRot1 = (0.009756465, 0, -0.89823556, 0.43940616)
+            float physics:lowerLimit = -100.45669
+            float physics:upperLimit = 100.45669
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_05" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1>
+            point3f physics:localPos0 = (0.000323, 0.0172, 0.010051)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.70406926, 0, -0.0001072338, -0.71013135)
+            quatf physics:localRot1 = (0.70406926, 0, -0.0001072338, -0.71013135)
+            float physics:lowerLimit = -150.11494
+            float physics:upperLimit = 186.32588
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_06" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1>
+            point3f physics:localPos0 = (-0.019988, 0.035407, 0.000351)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.012312775, 0, -0.7116065, 0.70247036)
+            quatf physics:localRot1 = (0.012312775, 0, -0.7116065, 0.70247036)
+            float physics:lowerLimit = -78.924934
+            float physics:upperLimit = 101.075485
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_07" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1>
+            point3f physics:localPos0 = (0.000473, 0.017284, 0.009899)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.7010192, 0, -0.0064399103, -0.71311325)
+            quatf physics:localRot1 = (0.7010192, 0, -0.0064399103, -0.71311325)
+            float physics:lowerLimit = -183.42671
+            float physics:upperLimit = 156.62375
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsRevoluteJoint "rev_motor_08" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:maxForce = 2.94
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/ST3215_8_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/ST3215_8_v1_1/Gripper_Gear_v1_1>
+            point3f physics:localPos0 = (0, 0, 0)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.71314234, 0, 0.0063304347, 0.7009907)
+            quatf physics:localRot1 = (0.71314234, 0, 0.0063304347, 0.7009907)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 126.21114
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsPrismaticJoint "rev_motor_08_1" (
+            prepend apiSchemas = ["NewtonMimicAPI", "PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:maxForce = 2.94
+            float newton:mimicCoef1 = -0.0115
+            rel newton:mimicJoint = </Elrobot/Physics/rev_motor_08>
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/Gripper_Jaw_02_v1_1>
+            point3f physics:localPos0 = (0.311734, -0.199648, 0.032849)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.012312775, 0, -0.7116065, 0.70247036)
+            quatf physics:localRot1 = (0.012312775, 0, -0.7116065, 0.70247036)
+            float physics:lowerLimit = -0.0255
+            float physics:upperLimit = 0
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsPrismaticJoint "rev_motor_08_2" (
+            prepend apiSchemas = ["NewtonMimicAPI", "PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:maxForce = 2.94
+            float newton:mimicCoef1 = 0.0115
+            rel newton:mimicJoint = </Elrobot/Physics/rev_motor_08>
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/Gripper_Jaw_01_v1_1>
+            point3f physics:localPos0 = (0.308573, -0.243367, -0.049391)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (0.012312775, 0, -0.7116065, 0.70247036)
+            quatf physics:localRot1 = (0.012312775, 0, -0.7116065, 0.70247036)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.0255
+            custom float urdf:limit:effort = 2.94
+            custom float urdf:limit:velocity = 4.71
+        }
+
+        def PhysicsFixedJoint "root_joint"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link>
+            point3f physics:localPos0 = (0, 0, 0)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid1_h6"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1>
+            point3f physics:localPos0 = (0, 0.007585, 0.0315)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid3_h6"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1>
+            point3f physics:localPos0 = (0.000625, -0.000058, 0.0067)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid7_h6"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1>
+            point3f physics:localPos0 = (0.019863, -0.000487, 0.055827)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid9_h6"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1>
+            point3f physics:localPos0 = (0.021263, 0.001933, 0.036403)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid11_i7"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1>
+            point3f physics:localPos0 = (0.020391, 0.065663, -0.010035)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid13_i7"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1>
+            point3f physics:localPos0 = (0.000065, 0.0075, -0.000001)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid15_i7"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1>
+            point3f physics:localPos0 = (0.020478, 0.038023, -0.010611)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "tn__Rigid17_i7"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1>
+            custom rel physics:body1
+            prepend rel physics:body1 = </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/ST3215_8_v1_1>
+            point3f physics:localPos0 = (0.000776, 0.045242, -0.000409)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+    }
+}
+

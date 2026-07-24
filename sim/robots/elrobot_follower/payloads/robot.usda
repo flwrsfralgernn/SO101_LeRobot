@@ -1,0 +1,511 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.2"
+    }
+    defaultPrim = "Elrobot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpzh818sm_/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/usdex_elrobot_follower/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/temp_elrobot_follower/elrobot_follower.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+over "Elrobot" (
+    prepend apiSchemas = ["IsaacRobotAPI"]
+)
+{
+    prepend rel isaac:physics:robotJoints = [
+        </Elrobot/Physics/root_joint>,
+        </Elrobot/Physics/tn__Rigid1_h6>,
+        </Elrobot/Physics/rev_motor_01>,
+        </Elrobot/Physics/tn__Rigid3_h6>,
+        </Elrobot/Physics/rev_motor_02>,
+        </Elrobot/Physics/tn__Rigid7_h6>,
+        </Elrobot/Physics/rev_motor_03>,
+        </Elrobot/Physics/tn__Rigid9_h6>,
+        </Elrobot/Physics/rev_motor_04>,
+        </Elrobot/Physics/tn__Rigid11_i7>,
+        </Elrobot/Physics/rev_motor_05>,
+        </Elrobot/Physics/tn__Rigid13_i7>,
+        </Elrobot/Physics/rev_motor_06>,
+        </Elrobot/Physics/tn__Rigid15_i7>,
+        </Elrobot/Physics/rev_motor_07>,
+        </Elrobot/Physics/tn__Rigid17_i7>,
+        </Elrobot/Physics/rev_motor_08_1>,
+        </Elrobot/Physics/rev_motor_08_2>,
+        </Elrobot/Physics/rev_motor_08>,
+    ]
+    prepend rel isaac:physics:robotLinks = [
+        </Elrobot/Geometry/base_link>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/ST3215_8_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/ST3215_8_v1_1/Gripper_Gear_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/Gripper_Jaw_02_v1_1>,
+        </Elrobot/Geometry/base_link/ST3215_1_v1_1/Joint_01_1/ST3215_2_v1_1/Joint_02_1/ST3215_3_v1_1/Joint_03_v1_1/ST3215_4_v1_1/Joint_04_v1_1/ST3215_5_v1_1/Joint_05_v1_1/ST3215_6_v1_1/Joint_06_v1_1/ST3215_7_v1_1/Gripper_Base_v1_1/Gripper_Jaw_01_v1_1>,
+    ]
+    token isaac:robotType = "Default"
+
+    over "Geometry"
+    {
+        over "base_link" (
+            prepend apiSchemas = ["IsaacLinkAPI"]
+        )
+        {
+            over "base_link" (
+                prepend apiSchemas = ["IsaacSiteAPI"]
+            )
+            {
+            }
+
+            over "ST3215_1_v1_1" (
+                prepend apiSchemas = ["IsaacLinkAPI"]
+            )
+            {
+                over "ST3215_1_v1_1" (
+                    prepend apiSchemas = ["IsaacSiteAPI"]
+                )
+                {
+                }
+
+                over "Joint_01_1" (
+                    prepend apiSchemas = ["IsaacLinkAPI"]
+                )
+                {
+                    over "Joint_01_1" (
+                        prepend apiSchemas = ["IsaacSiteAPI"]
+                    )
+                    {
+                    }
+
+                    over "ST3215_2_v1_1" (
+                        prepend apiSchemas = ["IsaacLinkAPI"]
+                    )
+                    {
+                        over "ST3215_2_v1_1" (
+                            prepend apiSchemas = ["IsaacSiteAPI"]
+                        )
+                        {
+                        }
+
+                        over "Joint_02_1" (
+                            prepend apiSchemas = ["IsaacLinkAPI"]
+                        )
+                        {
+                            over "Joint_02_1" (
+                                prepend apiSchemas = ["IsaacSiteAPI"]
+                            )
+                            {
+                            }
+
+                            over "ST3215_3_v1_1" (
+                                prepend apiSchemas = ["IsaacLinkAPI"]
+                            )
+                            {
+                                over "ST3215_3_v1_1" (
+                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                )
+                                {
+                                }
+
+                                over "Joint_03_v1_1" (
+                                    prepend apiSchemas = ["IsaacLinkAPI"]
+                                )
+                                {
+                                    over "Joint_03_v1_1" (
+                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                    )
+                                    {
+                                    }
+
+                                    over "ST3215_4_v1_1" (
+                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                    )
+                                    {
+                                        over "ST3215_4_v1_1" (
+                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                        )
+                                        {
+                                        }
+
+                                        over "Joint_04_v1_1" (
+                                            prepend apiSchemas = ["IsaacLinkAPI"]
+                                        )
+                                        {
+                                            over "Joint_04_v1_1" (
+                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                            )
+                                            {
+                                            }
+
+                                            over "ST3215_5_v1_1" (
+                                                prepend apiSchemas = ["IsaacLinkAPI"]
+                                            )
+                                            {
+                                                over "ST3215_5_v1_1" (
+                                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                                )
+                                                {
+                                                }
+
+                                                over "Joint_05_v1_1" (
+                                                    prepend apiSchemas = ["IsaacLinkAPI"]
+                                                )
+                                                {
+                                                    over "Joint_05_v1_1" (
+                                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                                    )
+                                                    {
+                                                    }
+
+                                                    over "ST3215_6_v1_1" (
+                                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                                    )
+                                                    {
+                                                        over "ST3215_6_v1_1" (
+                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                        )
+                                                        {
+                                                        }
+
+                                                        over "Joint_06_v1_1" (
+                                                            prepend apiSchemas = ["IsaacLinkAPI"]
+                                                        )
+                                                        {
+                                                            over "Joint_06_v1_1" (
+                                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                                            )
+                                                            {
+                                                            }
+
+                                                            over "ST3215_7_v1_1" (
+                                                                prepend apiSchemas = ["IsaacLinkAPI"]
+                                                            )
+                                                            {
+                                                                over "ST3215_7_v1_1" (
+                                                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                )
+                                                                {
+                                                                }
+
+                                                                over "Gripper_Base_v1_1" (
+                                                                    prepend apiSchemas = ["IsaacLinkAPI"]
+                                                                )
+                                                                {
+                                                                    over "Gripper_Base_v1_1" (
+                                                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                    )
+                                                                    {
+                                                                    }
+
+                                                                    over "ST3215_8_v1_1" (
+                                                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                                                    )
+                                                                    {
+                                                                        over "ST3215_8_v1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Gear_v1_1" (
+                                                                            prepend apiSchemas = ["IsaacLinkAPI"]
+                                                                        )
+                                                                        {
+                                                                            over "Gripper_Gear_v1_1" (
+                                                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                            )
+                                                                            {
+                                                                            }
+
+                                                                            over "Gripper_Gear_v1_1_1" (
+                                                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                            )
+                                                                            {
+                                                                            }
+                                                                        }
+
+                                                                        over "ST3215_8_v1_1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Jaw_02_v1_1" (
+                                                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                                                    )
+                                                                    {
+                                                                        over "Gripper_Jaw_02_v1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Jaw_02_v1_1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Jaw_01_v1_1" (
+                                                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                                                    )
+                                                                    {
+                                                                        over "Gripper_Jaw_01_v1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Jaw_01_v1_1_1" (
+                                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                        )
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Base_v1_1_1" (
+                                                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                    )
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "ST3215_7_v1_1_1" (
+                                                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                                                )
+                                                                {
+                                                                }
+                                                            }
+
+                                                            over "Joint_06_v1_1_1" (
+                                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                                            )
+                                                            {
+                                                            }
+                                                        }
+
+                                                        over "ST3215_6_v1_1_1" (
+                                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                                        )
+                                                        {
+                                                        }
+                                                    }
+
+                                                    over "Joint_05_v1_1_1" (
+                                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                                    )
+                                                    {
+                                                    }
+                                                }
+
+                                                over "ST3215_5_v1_1_1" (
+                                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                                )
+                                                {
+                                                }
+                                            }
+
+                                            over "Joint_04_v1_1_1" (
+                                                prepend apiSchemas = ["IsaacSiteAPI"]
+                                            )
+                                            {
+                                            }
+                                        }
+
+                                        over "ST3215_4_v1_1_1" (
+                                            prepend apiSchemas = ["IsaacSiteAPI"]
+                                        )
+                                        {
+                                        }
+                                    }
+
+                                    over "Joint_03_v1_1_1" (
+                                        prepend apiSchemas = ["IsaacSiteAPI"]
+                                    )
+                                    {
+                                    }
+                                }
+
+                                over "ST3215_3_v1_1_1" (
+                                    prepend apiSchemas = ["IsaacSiteAPI"]
+                                )
+                                {
+                                }
+                            }
+
+                            over "Joint_02_1_1" (
+                                prepend apiSchemas = ["IsaacSiteAPI"]
+                            )
+                            {
+                            }
+                        }
+
+                        over "ST3215_2_v1_1_1" (
+                            prepend apiSchemas = ["IsaacSiteAPI"]
+                        )
+                        {
+                        }
+                    }
+
+                    over "Joint_01_1_1" (
+                        prepend apiSchemas = ["IsaacSiteAPI"]
+                    )
+                    {
+                    }
+                }
+
+                over "ST3215_1_v1_1_1" (
+                    prepend apiSchemas = ["IsaacSiteAPI"]
+                )
+                {
+                }
+            }
+
+            over "base_link_1" (
+                prepend apiSchemas = ["IsaacSiteAPI"]
+            )
+            {
+            }
+        }
+    }
+
+    over "Physics"
+    {
+        over "root_joint" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid1_h6" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_01" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid3_h6" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_02" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid7_h6" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_03" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid9_h6" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_04" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid11_i7" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_05" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid13_i7" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_06" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid15_i7" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_07" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "tn__Rigid17_i7" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_08" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_08_1" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "rev_motor_08_2" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+    }
+}
+

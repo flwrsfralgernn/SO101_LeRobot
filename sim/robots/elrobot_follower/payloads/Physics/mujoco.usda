@@ -1,0 +1,458 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.2"
+    }
+    defaultPrim = "Elrobot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpzh818sm_/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/usdex_elrobot_follower/Elrobot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_elrobot_follower_fm5y55r2/temp_elrobot_follower/elrobot_follower.usd
+
+
+Generated from Composed Stage of root layer /home/rog/Downloads/so101_lerobot/sim/robots/elrobot_follower/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+over "Elrobot"
+{
+    over "Physics"
+    {
+        def MjcActuator "rev_motor_01_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_01>
+        }
+
+        def MjcActuator "rev_motor_02_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_02>
+        }
+
+        def MjcActuator "rev_motor_03_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_03>
+        }
+
+        def MjcActuator "rev_motor_04_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_04>
+        }
+
+        def MjcActuator "rev_motor_05_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_05>
+        }
+
+        def MjcActuator "rev_motor_06_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_06>
+        }
+
+        def MjcActuator "rev_motor_07_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_07>
+        }
+
+        def MjcActuator "rev_motor_08_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_08>
+        }
+
+        def MjcActuator "rev_motor_08_1_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_08_1>
+        }
+
+        def MjcActuator "rev_motor_08_2_actuator"
+        {
+            uniform double mjc:forceRange:max = 2.940000057220459
+            uniform double mjc:forceRange:min = -2.940000057220459
+            custom rel mjc:target
+            prepend rel mjc:target = </Elrobot/Physics/rev_motor_08_2>
+        }
+
+        over "root_joint"
+        {
+        }
+
+        over "tn__Rigid1_h6"
+        {
+        }
+
+        over "rev_motor_01" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid3_h6"
+        {
+        }
+
+        over "rev_motor_02" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid7_h6"
+        {
+        }
+
+        over "rev_motor_03" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid9_h6"
+        {
+        }
+
+        over "rev_motor_04" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid11_i7"
+        {
+        }
+
+        over "rev_motor_05" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid13_i7"
+        {
+        }
+
+        over "rev_motor_06" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid15_i7"
+        {
+        }
+
+        over "rev_motor_07" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__Rigid17_i7"
+        {
+        }
+
+        over "rev_motor_08" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "rev_motor_08_1" (
+            delete apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+        }
+
+        over "rev_motor_08_2" (
+            delete apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+        }
+    }
+
+    over "Geometry"
+    {
+        over "base_link"
+        {
+            over "base_link"
+            {
+            }
+
+            over "ST3215_1_v1_1"
+            {
+                over "ST3215_1_v1_1"
+                {
+                }
+
+                over "Joint_01_1"
+                {
+                    over "Joint_01_1"
+                    {
+                    }
+
+                    over "ST3215_2_v1_1"
+                    {
+                        over "ST3215_2_v1_1"
+                        {
+                        }
+
+                        over "Joint_02_1"
+                        {
+                            over "Joint_02_1"
+                            {
+                            }
+
+                            over "ST3215_3_v1_1"
+                            {
+                                over "ST3215_3_v1_1"
+                                {
+                                }
+
+                                over "Joint_03_v1_1"
+                                {
+                                    over "Joint_03_v1_1"
+                                    {
+                                    }
+
+                                    over "ST3215_4_v1_1"
+                                    {
+                                        over "ST3215_4_v1_1"
+                                        {
+                                        }
+
+                                        over "Joint_04_v1_1"
+                                        {
+                                            over "Joint_04_v1_1"
+                                            {
+                                            }
+
+                                            over "ST3215_5_v1_1"
+                                            {
+                                                over "ST3215_5_v1_1"
+                                                {
+                                                }
+
+                                                over "Joint_05_v1_1"
+                                                {
+                                                    over "Joint_05_v1_1"
+                                                    {
+                                                    }
+
+                                                    over "ST3215_6_v1_1"
+                                                    {
+                                                        over "ST3215_6_v1_1"
+                                                        {
+                                                        }
+
+                                                        over "Joint_06_v1_1"
+                                                        {
+                                                            over "Joint_06_v1_1"
+                                                            {
+                                                            }
+
+                                                            over "ST3215_7_v1_1"
+                                                            {
+                                                                over "ST3215_7_v1_1"
+                                                                {
+                                                                }
+
+                                                                over "Gripper_Base_v1_1"
+                                                                {
+                                                                    over "Gripper_Base_v1_1"
+                                                                    {
+                                                                    }
+
+                                                                    over "ST3215_8_v1_1"
+                                                                    {
+                                                                        over "ST3215_8_v1_1"
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Gear_v1_1"
+                                                                        {
+                                                                            over "Gripper_Gear_v1_1"
+                                                                            {
+                                                                            }
+
+                                                                            over "Gripper_Gear_v1_1_1"
+                                                                            {
+                                                                            }
+                                                                        }
+
+                                                                        over "ST3215_8_v1_1_1"
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Jaw_02_v1_1"
+                                                                    {
+                                                                        over "Gripper_Jaw_02_v1_1"
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Jaw_02_v1_1_1"
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Jaw_01_v1_1"
+                                                                    {
+                                                                        over "Gripper_Jaw_01_v1_1"
+                                                                        {
+                                                                        }
+
+                                                                        over "Gripper_Jaw_01_v1_1_1"
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "Gripper_Base_v1_1_1"
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "ST3215_7_v1_1_1"
+                                                                {
+                                                                }
+                                                            }
+
+                                                            over "Joint_06_v1_1_1"
+                                                            {
+                                                            }
+                                                        }
+
+                                                        over "ST3215_6_v1_1_1"
+                                                        {
+                                                        }
+                                                    }
+
+                                                    over "Joint_05_v1_1_1"
+                                                    {
+                                                    }
+                                                }
+
+                                                over "ST3215_5_v1_1_1"
+                                                {
+                                                }
+                                            }
+
+                                            over "Joint_04_v1_1_1"
+                                            {
+                                            }
+                                        }
+
+                                        over "ST3215_4_v1_1_1"
+                                        {
+                                        }
+                                    }
+
+                                    over "Joint_03_v1_1_1"
+                                    {
+                                    }
+                                }
+
+                                over "ST3215_3_v1_1_1"
+                                {
+                                }
+                            }
+
+                            over "Joint_02_1_1"
+                            {
+                            }
+                        }
+
+                        over "ST3215_2_v1_1_1"
+                        {
+                        }
+                    }
+
+                    over "Joint_01_1_1"
+                    {
+                    }
+                }
+
+                over "ST3215_1_v1_1_1"
+                {
+                }
+            }
+
+            over "base_link_1"
+            {
+            }
+        }
+    }
+
+    over "Materials"
+    {
+        over "silver"
+        {
+        }
+
+        over "ST3215_1_1"
+        {
+        }
+
+        over "ST3215_2_1"
+        {
+        }
+
+        over "ST3215_3_1"
+        {
+        }
+
+        over "ST3215_4_1"
+        {
+        }
+
+        over "ST3215_5_1"
+        {
+        }
+
+        over "ST3215_6_1"
+        {
+        }
+
+        over "ST3215_7_1"
+        {
+        }
+
+        over "ST3215_8_1"
+        {
+        }
+    }
+}
+
