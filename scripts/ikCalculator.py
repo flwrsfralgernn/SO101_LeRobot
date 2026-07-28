@@ -13,11 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-<<<<<<< HEAD
-import traceback
-=======
 import time
->>>>>>> 417d8be (ik calculator fixed with collision offset)
 import xml.etree.ElementTree as ET
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -80,29 +76,6 @@ GRASP_DYNAMIC_FRICTION = 1.5
 GRIPPER_LOWER_LIMIT_TOLERANCE_RAD = 0.01
 DEFAULT_LIFT_HEIGHT_MM = 100.0
 DEFAULT_LIFT_STOP_DISTANCE_MM = 7.0
-<<<<<<< HEAD
-DEFAULT_PREGRASP_CLEARANCE_MM = 30.0
-LIFT_CONTACT_LOSS_TOLERANCE_FRAMES = 5
-IK_MAX_ITERATIONS = 100
-IK_POSITION_TOLERANCE_M = 0.0005
-IK_ORIENTATION_TOLERANCE_RAD = math.radians(2.0)
-IK_POSITION_WEIGHT = 1.0
-IK_ORIENTATION_WEIGHT = 1.0
-DEFAULT_APPROACH_STOP_DISTANCE_MM = 7.0
-IK_COMMAND_STEPS = 300
-POSE_IK_WAYPOINT_COMMAND_STEPS = 60
-POSE_IK_WAYPOINT_SPACING_M = 0.005
-IK_SETTLE_MAX_STEPS = 300
-IK_SETTLED_FRAMES = 10
-IK_SETTLED_ARM_VELOCITY_THRESHOLD_RAD_S = 0.01
-DEBUG_POINT_WAIT_STEPS = 45
-# Keep the contact point just outside the object until the grasp motion begins.
-SPHERE_SURFACE_CLEARANCE_M = 0.0
-LEROBOT_FINGERTIP_FRAME_RPY = "0 3.141592653589793 0"
-# Diagnostic-only comparison: test whether the pre-grasp position is
-# reachable before asking the 5-DOF arm to satisfy a full 6D pose.
-DIAGNOSTIC_POSITION_ONLY_PREGRASP = True
-=======
 LIFT_COMMAND_STEPS = 600
 LIFT_CONTACT_LOSS_TOLERANCE_FRAMES = 10
 IK_MAX_ITERATIONS = 100
@@ -138,7 +111,6 @@ TOOL_MODEL_POSITION_TOLERANCE_M = 0.001
 # Isaac's imported wrist-roll zero omits the URDF's 0.0486795 rad calibration
 # rotation, producing a fixed 2.789-degree frame discrepancy at the tool.
 TOOL_MODEL_ORIENTATION_TOLERANCE_RAD = math.radians(3.0)
->>>>>>> 417d8be (ik calculator fixed with collision offset)
 
 
 def lerobot_worker_main() -> int:
@@ -731,82 +703,6 @@ def lerobot_worker_main() -> int:
         )
         return candidate
 
-    def create_fingertip_urdf(
-        temp_dir: Path, fingertip_offset_m: worker_np.ndarray
-    ) -> Path:
-        """Create a temporary URDF with Isaac's fixed fingertip frame."""
-        # RobotKinematics constrains a URDF frame, while the desired point is
-        # the fixed-finger mesh endpoint measured by Isaac. Add that exact
-        # point as a temporary fixed frame without modifying third_party. Its
-        # orientation matches gripper_frame_link, whose +Z tool axis points
-        # through the gripper fingers.
-        urdf_tree = ET.parse(SO101_URDF_PATH)
-        urdf_root = urdf_tree.getroot()
-        for mesh in urdf_root.findall(".//mesh"):
-            filename = mesh.attrib.get("filename")
-            if filename and not Path(filename).is_absolute():
-                mesh.set(
-                    "filename",
-                    str((SO101_URDF_PATH.parent / filename).resolve()),
-                )
-
-        ET.SubElement(urdf_root, "link", {"name": LEROBOT_FINGERTIP_FRAME})
-        fingertip_joint = ET.SubElement(
-            urdf_root,
-            "joint",
-            {"name": "ik_fixed_fingertip_joint", "type": "fixed"},
-        )
-        ET.SubElement(fingertip_joint, "parent", {"link": "gripper_link"})
-        ET.SubElement(
-            fingertip_joint, "child", {"link": LEROBOT_FINGERTIP_FRAME}
-        )
-        ET.SubElement(
-            fingertip_joint,
-            "origin",
-            {
-                "xyz": " ".join(
-                    f"{value:.17g}" for value in fingertip_offset_m
-                ),
-                "rpy": LEROBOT_FINGERTIP_FRAME_RPY,
-            },
-        )
-        fingertip_urdf = temp_dir / "so101_fingertip.urdf"
-        urdf_tree.write(fingertip_urdf, encoding="utf-8", xml_declaration=True)
-        return fingertip_urdf
-
-    def validate_rigid_transform(
-        transform: worker_np.ndarray, label: str
-    ) -> None:
-        """Reject malformed homogeneous transforms before calling Placo."""
-        if transform.shape != (4, 4):
-            raise ValueError(f"{label} must have shape (4, 4)")
-        if not worker_np.all(worker_np.isfinite(transform)):
-            raise ValueError(f"{label} contains NaN or infinity")
-        if not worker_np.allclose(
-            transform[3], worker_np.array([0.0, 0.0, 0.0, 1.0]), atol=1e-9
-        ):
-            raise ValueError(f"{label} must have homogeneous final row [0, 0, 0, 1]")
-
-        rotation = transform[:3, :3]
-        if not worker_np.allclose(
-            rotation.T @ rotation, worker_np.eye(3), atol=1e-6
-        ):
-            raise ValueError(f"{label} rotation is not orthonormal")
-        determinant = float(worker_np.linalg.det(rotation))
-        if not worker_np.isclose(determinant, 1.0, atol=1e-6):
-            raise ValueError(
-                f"{label} rotation must have determinant +1, got {determinant}"
-            )
-
-    def orientation_error_rad(
-        solved_rotation: worker_np.ndarray,
-        target_rotation: worker_np.ndarray,
-    ) -> float:
-        """Return the shortest angular distance between two rotations."""
-        relative_rotation = target_rotation.T @ solved_rotation
-        cosine = float((worker_np.trace(relative_rotation) - 1.0) * 0.5)
-        return float(worker_np.arccos(worker_np.clip(cosine, -1.0, 1.0)))
-
     request = json.load(sys.stdin)
     operation = request.get("operation")
     if operation == "setup":
@@ -843,43 +739,6 @@ def lerobot_worker_main() -> int:
             "pose": pose.tolist(),
         }
     elif operation == "position_ik":
-<<<<<<< HEAD
-        fingertip_offset_m = worker_np.asarray(
-            request["fingertip_offset_m"], dtype=worker_np.float64
-        )
-        seed_joints_deg = worker_np.asarray(
-            request["seed_joints_deg"], dtype=worker_np.float64
-        )
-        target_position_m = worker_np.asarray(
-            request["target_position_m"], dtype=worker_np.float64
-        )
-        if fingertip_offset_m.shape != (3,):
-            raise ValueError("fingertip_offset_m must contain three values")
-        if seed_joints_deg.shape != (len(ARM_JOINT_NAMES),):
-            raise ValueError(
-                f"seed_joints_deg must contain {len(ARM_JOINT_NAMES)} values"
-            )
-        if target_position_m.shape != (3,):
-            raise ValueError("target_position_m must contain three values")
-        if not all(
-            worker_np.all(worker_np.isfinite(value))
-            for value in (
-                fingertip_offset_m,
-                seed_joints_deg,
-                target_position_m,
-            )
-        ):
-            raise ValueError("Position IK request contains NaN or infinity")
-
-        with tempfile.TemporaryDirectory(prefix="so101_position_ik_") as temp_dir:
-            fingertip_urdf = create_fingertip_urdf(
-                Path(temp_dir), fingertip_offset_m
-            )
-            kinematics = RobotKinematics(
-                urdf_path=str(fingertip_urdf),
-                target_frame_name=LEROBOT_FINGERTIP_FRAME,
-                joint_names=ARM_JOINT_NAMES,
-=======
         fingertip_offset_m = request_array("fingertip_offset_m", (3,))
         seed_joints_deg = request_array(
             "seed_joints_deg",
@@ -1225,7 +1084,6 @@ def lerobot_worker_main() -> int:
         ):
             raise ValueError(
                 "seed_regularization_weight must be in the range (0, 1]"
->>>>>>> 417d8be (ik calculator fixed with collision offset)
             )
 
         final_target_position_m = waypoint_positions_m[-1]
@@ -1418,153 +1276,6 @@ def lerobot_worker_main() -> int:
             "candidates": candidates,
             "position_only_fallback": position_only_fallback,
         }
-    elif operation == "pose_ik_path":
-        fingertip_offset_m = worker_np.asarray(
-            request["fingertip_offset_m"], dtype=worker_np.float64
-        )
-        seed_joints_deg = worker_np.asarray(
-            request["seed_joints_deg"], dtype=worker_np.float64
-        )
-        target_poses_m = worker_np.asarray(
-            request["target_poses_m"], dtype=worker_np.float64
-        )
-        if fingertip_offset_m.shape != (3,):
-            raise ValueError("fingertip_offset_m must contain three values")
-        if seed_joints_deg.shape != (len(ARM_JOINT_NAMES),):
-            raise ValueError(
-                f"seed_joints_deg must contain {len(ARM_JOINT_NAMES)} values"
-            )
-        if target_poses_m.ndim != 3 or target_poses_m.shape[1:] != (4, 4):
-            raise ValueError(
-                "target_poses_m must contain one or more transforms of shape (4, 4)"
-            )
-        if target_poses_m.shape[0] == 0:
-            raise ValueError("target_poses_m must contain at least one target pose")
-        if not all(
-            worker_np.all(worker_np.isfinite(value))
-            for value in (fingertip_offset_m, seed_joints_deg, target_poses_m)
-        ):
-            raise ValueError("Pose IK request contains NaN or infinity")
-
-        max_iterations = int(request["max_iterations"])
-        position_tolerance_m = float(request["position_tolerance_m"])
-        orientation_tolerance_rad = float(request["orientation_tolerance_rad"])
-        position_weight = float(request["position_weight"])
-        orientation_weight = float(request["orientation_weight"])
-        if max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
-        if not all(
-            math.isfinite(value) and value > 0.0
-            for value in (
-                position_tolerance_m,
-                orientation_tolerance_rad,
-                position_weight,
-                orientation_weight,
-            )
-        ):
-            raise ValueError(
-                "Pose IK tolerances and weights must be finite positive values"
-            )
-        for index, target_pose_m in enumerate(target_poses_m):
-            validate_rigid_transform(target_pose_m, f"target_poses_m[{index}]")
-
-        with tempfile.TemporaryDirectory(prefix="so101_pose_ik_") as temp_dir:
-            fingertip_urdf = create_fingertip_urdf(
-                Path(temp_dir), fingertip_offset_m
-            )
-            kinematics = RobotKinematics(
-                urdf_path=str(fingertip_urdf),
-                target_frame_name=LEROBOT_FINGERTIP_FRAME,
-                joint_names=ARM_JOINT_NAMES,
-            )
-
-            joints_deg = seed_joints_deg.copy()
-            waypoint_results: list[dict[str, object]] = []
-            status = "converged"
-            for waypoint_index, target_pose_m in enumerate(target_poses_m):
-                solved_pose = worker_np.asarray(
-                    kinematics.forward_kinematics(joints_deg),
-                    dtype=worker_np.float64,
-                )
-                initial_position_error_m = float(
-                    worker_np.linalg.norm(
-                        solved_pose[:3, 3] - target_pose_m[:3, 3]
-                    )
-                )
-                initial_angular_error_rad = orientation_error_rad(
-                    solved_pose[:3, :3], target_pose_m[:3, :3]
-                )
-                position_error_m = float("inf")
-                angular_error_rad = float("inf")
-                iterations = 0
-                for iterations in range(1, max_iterations + 1):
-                    joints_deg = worker_np.asarray(
-                        kinematics.inverse_kinematics(
-                            current_joint_pos=joints_deg,
-                            desired_ee_pose=target_pose_m,
-                            position_weight=position_weight,
-                            orientation_weight=orientation_weight,
-                        ),
-                        dtype=worker_np.float64,
-                    )
-                    if not worker_np.all(worker_np.isfinite(joints_deg)):
-                        raise RuntimeError("Pose IK returned NaN or infinity")
-                    solved_pose = worker_np.asarray(
-                        kinematics.forward_kinematics(joints_deg),
-                        dtype=worker_np.float64,
-                    )
-                    position_error_m = float(
-                        worker_np.linalg.norm(
-                            solved_pose[:3, 3] - target_pose_m[:3, 3]
-                        )
-                    )
-                    angular_error_rad = orientation_error_rad(
-                        solved_pose[:3, :3], target_pose_m[:3, :3]
-                    )
-                    if (
-                        position_error_m <= position_tolerance_m
-                        and angular_error_rad <= orientation_tolerance_rad
-                    ):
-                        break
-
-                waypoint_status = (
-                    "converged"
-                    if (
-                        position_error_m <= position_tolerance_m
-                        and angular_error_rad <= orientation_tolerance_rad
-                    )
-                    else "not_converged"
-                )
-                waypoint_results.append(
-                    {
-                        "index": waypoint_index,
-                        "status": waypoint_status,
-                        "target_pose_m": target_pose_m.tolist(),
-                        "solved_pose_m": solved_pose.tolist(),
-                        "solved_joints_deg": joints_deg.tolist(),
-                        "initial_position_error_m": initial_position_error_m,
-                        "initial_orientation_error_rad": initial_angular_error_rad,
-                        "position_error_m": position_error_m,
-                        "orientation_error_rad": angular_error_rad,
-                        "iterations": iterations,
-                    }
-                )
-                if waypoint_status != "converged":
-                    status = "not_converged"
-                    break
-
-        result = {
-            "status": status,
-            "joint_names": ARM_JOINT_NAMES,
-            "seed_joints_deg": seed_joints_deg.tolist(),
-            "completed_waypoints": len(waypoint_results),
-            "target_waypoints": len(target_poses_m),
-            "position_tolerance_m": position_tolerance_m,
-            "orientation_tolerance_rad": orientation_tolerance_rad,
-            "position_weight": position_weight,
-            "orientation_weight": orientation_weight,
-            "waypoints": waypoint_results,
-        }
     else:
         raise ValueError(
             f"Unsupported LeRobot worker operation: {operation!r}"
@@ -1684,15 +1395,6 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-<<<<<<< HEAD
-        "--pregrasp-clearance-mm",
-        type=float,
-        default=DEFAULT_PREGRASP_CLEARANCE_MM,
-        help=(
-            "Vertical clearance between the sphere top and the open-gripper "
-            "pre-grasp contact point "
-            f"(default: {DEFAULT_PREGRASP_CLEARANCE_MM:.1f} mm)"
-=======
         "--top-down-hover-height-mm",
         type=float,
         default=DEFAULT_TOP_DOWN_HOVER_HEIGHT_MM,
@@ -1748,7 +1450,6 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Maximum accepted tool-approach-axis error for constrained IK "
             f"(default: {DEFAULT_TOP_DOWN_AXIS_TOLERANCE_DEG:.3f} deg)"
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         ),
     )
     args, _ = parser.parse_known_args()
@@ -1775,12 +1476,6 @@ def parse_args() -> argparse.Namespace:
     ):
         parser.error("--lift-stop-distance-mm must be a positive number")
     if (
-<<<<<<< HEAD
-        not math.isfinite(args.pregrasp_clearance_mm)
-        or args.pregrasp_clearance_mm <= 0.0
-    ):
-        parser.error("--pregrasp-clearance-mm must be a positive number")
-=======
         not math.isfinite(args.top_down_hover_height_mm)
         or args.top_down_hover_height_mm <= 0.0
     ):
@@ -1816,7 +1511,6 @@ def parse_args() -> argparse.Namespace:
         parser.error(
             "--top-down-axis-tolerance-deg must be in the range (0, 180)"
         )
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     return args
 
 
@@ -1972,7 +1666,6 @@ def write_run_summary() -> None:
 
 def run_lerobot_worker(request: dict[str, object]) -> dict[str, object]:
     """Run one request in the external LeRobot Python environment."""
-    operation = str(request.get("operation", "<missing>"))
     python_path = ARGS.lerobot_python.expanduser().resolve()
     if not python_path.is_file():
         raise FileNotFoundError(
@@ -1992,12 +1685,6 @@ def run_lerobot_worker(request: dict[str, object]) -> dict[str, object]:
         f"{worker_environment.get('PATH', '')}"
     )
 
-    if operation != "setup":
-        builtins.print(
-            f"[IK DIAGNOSTIC] Launching external worker: operation={operation}",
-            flush=True,
-        )
-
     completed = subprocess.run(
         [str(python_path), str(Path(__file__).resolve()), "--lerobot-worker"],
         input=json.dumps(request, allow_nan=False),
@@ -2012,46 +1699,15 @@ def run_lerobot_worker(request: dict[str, object]) -> dict[str, object]:
         for line in completed.stdout.splitlines()
         if line.startswith(LEROBOT_WORKER_MARKER)
     ]
-    if operation != "setup":
-        builtins.print(
-            "[IK DIAGNOSTIC] Worker process returned: "
-            f"returncode={completed.returncode}, "
-            f"stdout_chars={len(completed.stdout)}, "
-            f"stderr_chars={len(completed.stderr)}",
-            flush=True,
-        )
-        if completed.stderr.strip():
-            builtins.print(
-                "[IK DIAGNOSTIC] Worker stderr follows:\n"
-                f"{completed.stderr.rstrip()}",
-                file=sys.stderr,
-                flush=True,
-            )
-
     if completed.returncode != 0 or not marker_lines:
         raise RuntimeError(
-            f"LeRobot worker failed during operation={operation!r}: "
+            "LeRobot setup worker failed: "
             f"returncode={completed.returncode}\n"
             f"stdout={completed.stdout}\n"
             f"stderr={completed.stderr}"
         )
 
-    payload = marker_lines[-1][len(LEROBOT_WORKER_MARKER) :]
-    try:
-        result = json.loads(payload)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(
-            f"LeRobot worker returned malformed JSON during operation={operation!r}: "
-            f"{error}\npayload={payload}\nstdout={completed.stdout}\n"
-            f"stderr={completed.stderr}"
-        ) from error
-
-    if operation != "setup":
-        builtins.print(
-            f"[IK DIAGNOSTIC] Worker result status={result.get('status')!r}",
-            flush=True,
-        )
-    return result
+    return json.loads(marker_lines[-1][len(LEROBOT_WORKER_MARKER) :])
 
 
 def initialize_lerobot() -> dict[str, object]:
@@ -2355,82 +2011,11 @@ def calculate_position_only_ik(
     return result
 
 
-<<<<<<< HEAD
-def run_position_only_pregrasp_diagnostic(
-=======
 def calculate_top_down_candidates(
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     stage: Usd.Stage,
     robot: Articulation,
     base_link: XformPrim,
     fingertip_offset_stage_units: np.ndarray,
-<<<<<<< HEAD
-    target_world_stage_units: np.ndarray,
-    meters_per_unit: float,
-) -> None:
-    """Test pre-grasp positional reachability without commanding the robot."""
-    builtins.print(
-        "\n[IK DIAGNOSTIC] Testing the same pre-grasp target with "
-        "orientation disabled. No joints will be commanded.",
-        flush=True,
-    )
-    try:
-        result = calculate_position_only_ik(
-            stage=stage,
-            robot=robot,
-            base_link=base_link,
-            fingertip_offset_stage_units=fingertip_offset_stage_units,
-            target_world_stage_units=target_world_stage_units,
-            meters_per_unit=meters_per_unit,
-        )
-    except BaseException:
-        builtins.print(
-            "[IK DIAGNOSTIC] Position-only pre-grasp test FAILED. "
-            "The issue is not limited to the full orientation constraint.",
-            file=sys.stderr,
-            flush=True,
-        )
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        return
-
-    builtins.print(
-        "[IK DIAGNOSTIC] Position-only pre-grasp test PASSED: "
-        f"error={float(result['position_error_m']) * 1000.0:.3f} mm, "
-        f"iterations={result['iterations']}. "
-        "If full pose IK now fails, orientation is the limiting constraint.",
-        flush=True,
-    )
-
-
-def draw_pre_ik_points(
-    contact_point_world: np.ndarray,
-    sphere_grasp_point: np.ndarray,
-    pregrasp_point: np.ndarray,
-) -> None:
-    """Draw the authored contact point plus top-down approach targets."""
-    draw = _debug_draw.acquire_debug_draw_interface()
-    draw.clear_points()
-    draw.clear_lines()
-    draw.draw_points(
-        [
-            contact_point_world.tolist(),
-            pregrasp_point.tolist(),
-            sphere_grasp_point.tolist(),
-        ],
-        [
-            (0.0, 1.0, 1.0, 1.0),
-            (1.0, 0.65, 0.0, 1.0),
-            (1.0, 0.0, 0.0, 1.0),
-        ],
-        [18.0, 18.0, 18.0],
-    )
-    draw.draw_lines(
-        [pregrasp_point.tolist()],
-        [sphere_grasp_point.tolist()],
-        [(1.0, 0.65, 0.0, 1.0)],
-        [3.0],
-=======
     grasp_candidates_world: list[dict[str, object]],
     meters_per_unit: float,
 ) -> dict[str, object]:
@@ -2850,7 +2435,6 @@ def draw_ik_debug_overlay(
     axis_length = DEBUG_IK_AXIS_LENGTH_MM / 1000.0 / meters_per_unit
     candidate_axis_length = (
         DEBUG_IK_CANDIDATE_AXIS_LENGTH_MM / 1000.0 / meters_per_unit
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     )
 
     yellow = (1.0, 1.0, 0.0, 1.0)
@@ -3013,12 +2597,6 @@ def draw_ik_debug_overlay(
     draw.draw_lines(line_starts, line_ends, line_colors, line_sizes)
 
     print()
-<<<<<<< HEAD
-    print("Debug draw legend:")
-    print("  CYAN current authored contact point")
-    print("  ORANGE top-down pre-grasp point and descent path")
-    print("  RED  selected sphere grasp point")
-=======
     print("IK debug overlay legend (viewport world coordinates):")
     print("  YELLOW sphere center; WHITE/RED alternate/selected surface grasp points")
     print("  CYAN initial authored fixed-finger contact and base-facing heading")
@@ -3058,7 +2636,6 @@ def draw_ik_execution_residual(
         [5.0],
     )
     print("  MAGENTA point/line now also shows actual final contact and residual")
->>>>>>> 417d8be (ik calculator fixed with collision offset)
 
 
 class SphereFingerContactTracker:
@@ -3579,335 +3156,6 @@ def apply_selected_approach_path(
     return commanded_arm_target_rad
 
 
-def rotation_error_rad(
-    actual_rotation: np.ndarray, target_rotation: np.ndarray
-) -> float:
-    """Return the shortest angular distance between two world rotations."""
-    relative_rotation = target_rotation.T @ actual_rotation
-    cosine = float((np.trace(relative_rotation) - 1.0) * 0.5)
-    return float(np.arccos(np.clip(cosine, -1.0, 1.0)))
-
-
-def fixed_fingertip_world_pose(
-    gripper: XformPrim,
-    contact_point: XformPrim,
-    meters_per_unit: float,
-) -> np.ndarray:
-    """Return the live pose of the temporary fixed-fingertip IK frame."""
-    gripper_positions, gripper_orientations = gripper.get_world_poses()
-    contact_positions, _ = contact_point.get_world_poses()
-    return make_transform(
-        as_numpy(contact_positions)[0].astype(np.float64) * meters_per_unit,
-        rotation_matrix_wxyz(as_numpy(gripper_orientations)[0])
-        @ rotation_matrix_rpy(np.array([0.0, math.pi, 0.0])),
-    )
-
-
-def world_from_lerobot_base_transform(
-    stage: Usd.Stage,
-    base_link: XformPrim,
-    meters_per_unit: float,
-) -> np.ndarray:
-    """Bridge the imported USD base frame and LeRobot's URDF base frame."""
-    usd_base_to_shoulder_zero = usd_joint_zero_transform(stage, "shoulder_pan")
-    lerobot_base_to_shoulder_zero = urdf_joint_origin("shoulder_pan")
-    usd_base_from_lerobot_base = (
-        usd_base_to_shoulder_zero
-        @ np.linalg.inv(lerobot_base_to_shoulder_zero)
-    )
-    return (
-        world_transform_meters(base_link, meters_per_unit)
-        @ usd_base_from_lerobot_base
-    )
-
-
-def calculate_pose_ik_path(
-    stage: Usd.Stage,
-    robot: Articulation,
-    base_link: XformPrim,
-    fingertip_offset_stage_units: np.ndarray,
-    target_world_poses_stage_units: list[np.ndarray],
-    meters_per_unit: float,
-    label: str,
-) -> dict[str, object]:
-    """Calculate a warm-started fixed-fingertip world-pose IK path."""
-    if not target_world_poses_stage_units:
-        raise ValueError("Pose IK path must contain at least one target pose")
-
-    target_world_poses_stage = np.asarray(
-        target_world_poses_stage_units, dtype=np.float64
-    )
-    if target_world_poses_stage.ndim != 3 or target_world_poses_stage.shape[1:] != (
-        4,
-        4,
-    ):
-        raise ValueError(
-            "Pose IK path must contain homogeneous transforms of shape (4, 4)"
-        )
-
-    arm_indices = resolve_arm_dof_indices(robot)
-    all_joint_positions = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-    seed_joints_rad = all_joint_positions[arm_indices]
-    seed_joints_deg = np.rad2deg(seed_joints_rad)
-    world_from_lerobot_base = world_from_lerobot_base_transform(
-        stage, base_link, meters_per_unit
-    )
-    lerobot_from_world = np.linalg.inv(world_from_lerobot_base)
-    target_lerobot_poses_m = target_world_poses_stage.copy()
-    target_lerobot_poses_m[:, :3, 3] *= meters_per_unit
-    target_lerobot_poses_m = np.asarray(
-        [
-            lerobot_from_world @ target_world_pose_m
-            for target_world_pose_m in target_lerobot_poses_m
-        ],
-        dtype=np.float64,
-    )
-    fingertip_offset_m = (
-        np.asarray(fingertip_offset_stage_units, dtype=np.float64)
-        * meters_per_unit
-    )
-
-    print()
-    print(f"{label} pose IK inputs:")
-    print(f"  Waypoints: {len(target_world_poses_stage)}")
-    print(f"  Seed joints (deg): {seed_joints_deg.tolist()}")
-    print(
-        "  Fixed fingertip offset in gripper frame (m): "
-        f"{fingertip_offset_m.tolist()}"
-    )
-    print_point(
-        "  First target fingertip position (world)",
-        target_world_poses_stage[0, :3, 3] * meters_per_unit,
-    )
-    print_point(
-        "  Final target fingertip position (world)",
-        target_world_poses_stage[-1, :3, 3] * meters_per_unit,
-    )
-    builtins.print(
-        "[IK DIAGNOSTIC] First target pose in LeRobot base frame (meters):\n"
-        f"{np.array2string(target_lerobot_poses_m[0], precision=8, suppress_small=False)}",
-        flush=True,
-    )
-    builtins.print(
-        "[IK DIAGNOSTIC] First target rotation checks: "
-        f"det={np.linalg.det(target_lerobot_poses_m[0, :3, :3]):.9f}, "
-        f"orthonormal_error="
-        f"{np.linalg.norm(target_lerobot_poses_m[0, :3, :3].T @ target_lerobot_poses_m[0, :3, :3] - np.eye(3)):.3e}",
-        flush=True,
-    )
-
-    result = run_lerobot_worker(
-        {
-            "operation": "pose_ik_path",
-            "seed_joints_deg": seed_joints_deg.tolist(),
-            "fingertip_offset_m": fingertip_offset_m.tolist(),
-            "target_poses_m": target_lerobot_poses_m.tolist(),
-            "max_iterations": IK_MAX_ITERATIONS,
-            "position_tolerance_m": IK_POSITION_TOLERANCE_M,
-            "orientation_tolerance_rad": IK_ORIENTATION_TOLERANCE_RAD,
-            "position_weight": IK_POSITION_WEIGHT,
-            "orientation_weight": IK_ORIENTATION_WEIGHT,
-        }
-    )
-    waypoints = result.get("waypoints")
-    builtins.print(
-        f"[IK DIAGNOSTIC] {label} raw status={result.get('status')!r}, "
-        f"completed_waypoints={result.get('completed_waypoints')}, "
-        f"requested_waypoints={result.get('target_waypoints')}",
-        flush=True,
-    )
-    if isinstance(waypoints, list):
-        for waypoint in waypoints:
-            builtins.print(
-                "[IK DIAGNOSTIC] "
-                f"waypoint={waypoint.get('index')}, "
-                f"status={waypoint.get('status')}, "
-                f"initial_position_error="
-                f"{float(waypoint.get('initial_position_error_m', float('nan'))) * 1000.0:.3f} mm, "
-                f"initial_orientation_error="
-                f"{math.degrees(float(waypoint.get('initial_orientation_error_rad', float('nan')))):.3f} deg, "
-                f"final_position_error="
-                f"{float(waypoint.get('position_error_m', float('nan'))) * 1000.0:.3f} mm, "
-                f"final_orientation_error="
-                f"{math.degrees(float(waypoint.get('orientation_error_rad', float('nan')))):.3f} deg, "
-                f"iterations={waypoint.get('iterations')}",
-                flush=True,
-            )
-            builtins.print(
-                "[IK DIAGNOSTIC] "
-                f"waypoint={waypoint.get('index')} solved_joints_deg="
-                f"{waypoint.get('solved_joints_deg')}",
-                flush=True,
-            )
-
-    if not isinstance(waypoints, list) or len(waypoints) != len(
-        target_world_poses_stage
-    ):
-        raise RuntimeError(
-            "LeRobot pose IK returned an incomplete waypoint result: "
-            f"expected={len(target_world_poses_stage)}, got={waypoints}"
-        )
-    if result.get("status") != "converged":
-        failed_waypoint = waypoints[-1]
-        raise RuntimeError(
-            f"{label} pose IK did not converge at waypoint "
-            f"{failed_waypoint.get('index')}: position_error="
-            f"{float(failed_waypoint.get('position_error_m', float('nan'))) * 1000.0:.3f} mm, "
-            f"orientation_error="
-            f"{math.degrees(float(failed_waypoint.get('orientation_error_rad', float('nan')))):.3f} deg"
-        )
-
-    lower_limits, upper_limits = robot.get_dof_limits()
-    lower_limits = as_numpy(lower_limits)[0]
-    upper_limits = as_numpy(upper_limits)[0]
-    for waypoint in waypoints:
-        solved_joints_deg = np.asarray(
-            waypoint["solved_joints_deg"], dtype=np.float64
-        )
-        solved_joints_rad = np.deg2rad(solved_joints_deg)
-        if solved_joints_rad.shape != (len(ARM_JOINT_NAMES),):
-            raise RuntimeError(
-                "LeRobot returned an invalid pose IK joint vector: "
-                f"{solved_joints_deg.tolist()}"
-            )
-        if not np.all(np.isfinite(solved_joints_rad)):
-            raise RuntimeError("LeRobot returned NaN or infinite pose IK joints")
-        violations = [
-            name
-            for name, value, index in zip(
-                ARM_JOINT_NAMES, solved_joints_rad, arm_indices
-            )
-            if value < lower_limits[index] or value > upper_limits[index]
-        ]
-        if violations:
-            raise RuntimeError(
-                "Pose IK solution violates joint limits at waypoint "
-                f"{waypoint['index']}: {violations}"
-            )
-
-    final_waypoint = waypoints[-1]
-    print(f"{label} pose IK result:")
-    print(f"  Status: {result['status']}")
-    print(f"  Final joints (deg): {final_waypoint['solved_joints_deg']}")
-    print(
-        "  Final position error: "
-        f"{float(final_waypoint['position_error_m']) * 1000.0:.3f} mm"
-    )
-    print(
-        "  Final orientation error: "
-        f"{math.degrees(float(final_waypoint['orientation_error_rad'])):.3f} deg"
-    )
-    return result
-
-
-def apply_pose_ik_path(
-    robot: Articulation,
-    gripper: XformPrim,
-    contact_point: XformPrim,
-    target_world_poses_stage_units: list[np.ndarray],
-    meters_per_unit: float,
-    ik_result: dict[str, object],
-    stop_distance_m: float,
-    label: str,
-) -> np.ndarray:
-    """Command a pose-IK path and hold at its final measured arm pose."""
-    waypoints = ik_result["waypoints"]
-    if not isinstance(waypoints, list) or len(waypoints) != len(
-        target_world_poses_stage_units
-    ):
-        raise RuntimeError("Pose IK result does not match the requested path")
-
-    arm_indices = resolve_arm_dof_indices(robot)
-    target_world_poses_m = [
-        np.asarray(target_pose, dtype=np.float64).copy()
-        for target_pose in target_world_poses_stage_units
-    ]
-    for target_pose_m in target_world_poses_m:
-        target_pose_m[:3, 3] *= meters_per_unit
-
-    print()
-    print(f"Applying {label} pose IK path:")
-    print(f"  Waypoints: {len(waypoints)}")
-    print(f"  Position stop distance: {stop_distance_m * 1000.0:.3f} mm")
-    print(
-        "  Orientation stop tolerance: "
-        f"{math.degrees(IK_ORIENTATION_TOLERANCE_RAD):.3f} deg"
-    )
-
-    for waypoint_index, (waypoint, target_world_pose_m) in enumerate(
-        zip(waypoints, target_world_poses_m)
-    ):
-        solved_joints_rad = np.deg2rad(
-            np.asarray(waypoint["solved_joints_deg"], dtype=np.float64)
-        )
-        current_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-        start_joints_rad = current_all[arm_indices].copy()
-        waypoint_reached = False
-
-        for step in range(1, POSE_IK_WAYPOINT_COMMAND_STEPS + 1):
-            fraction = step / POSE_IK_WAYPOINT_COMMAND_STEPS
-            blend = fraction * fraction * (3.0 - 2.0 * fraction)
-            arm_command = start_joints_rad + blend * (
-                solved_joints_rad - start_joints_rad
-            )
-            robot.set_dof_position_targets(arm_command, dof_indices=arm_indices)
-            SIMULATION_APP.update()
-
-            actual_pose_m = fixed_fingertip_world_pose(
-                gripper, contact_point, meters_per_unit
-            )
-            position_error_m = float(
-                np.linalg.norm(
-                    actual_pose_m[:3, 3] - target_world_pose_m[:3, 3]
-                )
-            )
-            orientation_error = rotation_error_rad(
-                actual_pose_m[:3, :3], target_world_pose_m[:3, :3]
-            )
-            if (
-                waypoint_index == len(waypoints) - 1
-                and position_error_m <= stop_distance_m
-                and orientation_error <= IK_ORIENTATION_TOLERANCE_RAD
-            ):
-                waypoint_reached = True
-                break
-
-        actual_pose_m = fixed_fingertip_world_pose(
-            gripper, contact_point, meters_per_unit
-        )
-        position_error_m = float(
-            np.linalg.norm(
-                actual_pose_m[:3, 3] - target_world_pose_m[:3, 3]
-            )
-        )
-        orientation_error = rotation_error_rad(
-            actual_pose_m[:3, :3], target_world_pose_m[:3, :3]
-        )
-        print(
-            f"  Waypoint {waypoint_index + 1}/{len(waypoints)}: "
-            f"position_error={position_error_m * 1000.0:.3f} mm, "
-            f"orientation_error={math.degrees(orientation_error):.3f} deg"
-        )
-        if waypoint_index != len(waypoints) - 1:
-            continue
-        if not waypoint_reached:
-            actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-            robot.set_dof_position_targets(
-                actual_all[arm_indices], dof_indices=arm_indices
-            )
-            raise RuntimeError(
-                f"{label} did not reach its final pose before the waypoint "
-                f"command limit: position_error={position_error_m * 1000.0:.3f} mm, "
-                f"orientation_error={math.degrees(orientation_error):.3f} deg"
-            )
-
-    actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-    arm_hold_target_rad = actual_all[arm_indices].copy()
-    robot.set_dof_position_targets(arm_hold_target_rad, dof_indices=arm_indices)
-    builtins.print(f"[{label.upper()} COMPLETED]", flush=True)
-    return arm_hold_target_rad
-
-
 def close_gripper_until_stable_grasp(
     robot: Articulation,
     arm_hold_target_rad: np.ndarray,
@@ -4121,39 +3369,28 @@ def close_gripper_until_stable_grasp(
 
 def lift_grasped_sphere(
     robot: Articulation,
-<<<<<<< HEAD
-    gripper: XformPrim,
-    contact_point: XformPrim,
-    target_world_poses_stage_units: list[np.ndarray],
-=======
     contact_point: FixedToolPoint,
     sphere: XformPrim,
     sphere_start_world_stage_units: np.ndarray,
     target_world_stage_units: np.ndarray,
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     meters_per_unit: float,
     ik_result: dict[str, object],
     gripper_target_rad: float,
     contact_tracker: SphereFingerContactTracker,
 ) -> np.ndarray:
-    """Lift vertically through pose IK while holding the finalized grasp."""
-    waypoints = ik_result["waypoints"]
-    if not isinstance(waypoints, list) or len(waypoints) != len(
-        target_world_poses_stage_units
-    ):
-        raise RuntimeError("Lift pose IK result does not match the requested path")
-
+    """Lift to a vertical fingertip target while holding the finalized grasp."""
     arm_indices = resolve_arm_dof_indices(robot)
-    target_world_poses_m = [
-        np.asarray(target_pose, dtype=np.float64).copy()
-        for target_pose in target_world_poses_stage_units
-    ]
-    for target_pose_m in target_world_poses_m:
-        target_pose_m[:3, 3] *= meters_per_unit
-
+    solved_joints_deg = np.asarray(
+        ik_result["solved_joints_deg"], dtype=np.float64
+    )
+    solved_joints_rad = np.deg2rad(solved_joints_deg)
+    current_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
+    start_joints_rad = current_all[arm_indices].copy()
+    target_world_m = (
+        np.asarray(target_world_stage_units, dtype=np.float64) * meters_per_unit
+    )
     stop_distance_m = ARGS.lift_stop_distance_mm / 1000.0
     contact_loss_frames = 0
-    total_steps = 0
 
     def sphere_displacement_m() -> tuple[np.ndarray, float]:
         sphere_positions, _ = sphere.get_world_poses()
@@ -4165,86 +3402,29 @@ def lift_grasped_sphere(
         return displacement, float(np.linalg.norm(displacement))
 
     print()
-    print("Lifting grasped sphere with orientation-holding pose IK:")
-    print(f"  Waypoints: {len(waypoints)}")
+    print("Lifting grasped sphere:")
+    print(f"  Start joints (rad): {start_joints_rad.tolist()}")
+    print(f"  Target joints (rad): {solved_joints_rad.tolist()}")
     print(f"  Constant gripper target (rad): {gripper_target_rad:.6f}")
     print(f"  Lift height: {ARGS.lift_height_mm:.3f} mm")
     print(f"  Lift stop distance: {ARGS.lift_stop_distance_mm:.3f} mm")
-    print(
-        "  Orientation stop tolerance: "
-        f"{math.degrees(IK_ORIENTATION_TOLERANCE_RAD):.3f} deg"
-    )
 
-    for waypoint_index, (waypoint, target_world_pose_m) in enumerate(
-        zip(waypoints, target_world_poses_m)
-    ):
-        solved_joints_rad = np.deg2rad(
-            np.asarray(waypoint["solved_joints_deg"], dtype=np.float64)
+    for step in range(1, LIFT_COMMAND_STEPS + 1):
+        fraction = step / LIFT_COMMAND_STEPS
+        blend = fraction * fraction * (3.0 - 2.0 * fraction)
+        arm_command = start_joints_rad + blend * (
+            solved_joints_rad - start_joints_rad
         )
-        current_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-        start_joints_rad = current_all[arm_indices].copy()
-        waypoint_reached = False
-
-<<<<<<< HEAD
-        for step in range(1, POSE_IK_WAYPOINT_COMMAND_STEPS + 1):
-            total_steps += 1
-            fraction = step / POSE_IK_WAYPOINT_COMMAND_STEPS
-            blend = fraction * fraction * (3.0 - 2.0 * fraction)
-            arm_command = start_joints_rad + blend * (
-                solved_joints_rad - start_joints_rad
-            )
-            robot.set_dof_position_targets(arm_command, dof_indices=arm_indices)
-            robot.set_dof_position_targets(
-                [gripper_target_rad], dof_indices=[GRIPPER_DOF_INDEX]
-            )
-            SIMULATION_APP.update()
-
-            fixed_contact = contact_tracker.fixed_finger_in_contact
-            moving_contact = contact_tracker.moving_finger_in_contact
-            if fixed_contact and moving_contact:
-                contact_loss_frames = 0
-            else:
-                contact_loss_frames += 1
-                if contact_loss_frames >= LIFT_CONTACT_LOSS_TOLERANCE_FRAMES:
-                    actual_all = as_numpy(
-                        robot.get_dof_positions()
-                    )[0].astype(np.float64)
-                    robot.set_dof_position_targets(
-                        actual_all[arm_indices], dof_indices=arm_indices
-                    )
-                    robot.set_dof_position_targets(
-                        [gripper_target_rad], dof_indices=[GRIPPER_DOF_INDEX]
-                    )
-                    raise RuntimeError(
-                        "Stable grasp was lost during orientation-holding lift: "
-                        f"step={total_steps}, fixed_contact={fixed_contact}, "
-                        f"moving_contact={moving_contact}"
-                    )
-
-            actual_pose_m = fixed_fingertip_world_pose(
-                gripper, contact_point, meters_per_unit
-            )
-            position_error_m = float(
-                np.linalg.norm(
-                    actual_pose_m[:3, 3] - target_world_pose_m[:3, 3]
-                )
-            )
-            orientation_error = rotation_error_rad(
-                actual_pose_m[:3, :3], target_world_pose_m[:3, :3]
-            )
-            if (
-                waypoint_index == len(waypoints) - 1
-                and position_error_m <= stop_distance_m
-                and orientation_error <= IK_ORIENTATION_TOLERANCE_RAD
-            ):
-                waypoint_reached = True
-                break
-
-        actual_pose_m = fixed_fingertip_world_pose(
-            gripper, contact_point, meters_per_unit
+        robot.set_dof_position_targets(
+            arm_command,
+            dof_indices=arm_indices,
         )
-        position_error_m = float(
-=======
+        robot.set_dof_position_targets(
+            [gripper_target_rad],
+            dof_indices=[GRIPPER_DOF_INDEX],
+        )
+        SIMULATION_APP.update()
+
         fixed_contact = contact_tracker.fixed_finger_in_contact
         moving_contact = contact_tracker.moving_finger_in_contact
         if fixed_contact and moving_contact:
@@ -4286,36 +3466,30 @@ def lift_grasped_sphere(
             contact_point.world_position_stage_units()
         )
         fingertip_error_m = float(
->>>>>>> 417d8be (ik calculator fixed with collision offset)
             np.linalg.norm(
-                actual_pose_m[:3, 3] - target_world_pose_m[:3, 3]
+                actual_fingertip_stage_units * meters_per_unit - target_world_m
             )
         )
-        orientation_error = rotation_error_rad(
-            actual_pose_m[:3, :3], target_world_pose_m[:3, :3]
-        )
-        print(
-            f"  Waypoint {waypoint_index + 1}/{len(waypoints)}: "
-            f"position_error={position_error_m * 1000.0:.3f} mm, "
-            f"orientation_error={math.degrees(orientation_error):.3f} deg"
-        )
-        if waypoint_index != len(waypoints) - 1:
-            continue
-        if not waypoint_reached:
-            actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
+        if fingertip_error_m <= stop_distance_m:
+            actual_all = as_numpy(
+                robot.get_dof_positions()
+            )[0].astype(np.float64)
+            lifted_arm_hold_rad = actual_all[arm_indices].copy()
             robot.set_dof_position_targets(
-                actual_all[arm_indices], dof_indices=arm_indices
+                lifted_arm_hold_rad,
+                dof_indices=arm_indices,
             )
             robot.set_dof_position_targets(
-                [gripper_target_rad], dof_indices=[GRIPPER_DOF_INDEX]
+                [gripper_target_rad],
+                dof_indices=[GRIPPER_DOF_INDEX],
             )
-            raise RuntimeError(
-                "Lift did not reach its final pose before the waypoint command "
-                f"limit: position_error={position_error_m * 1000.0:.3f} mm, "
-                f"orientation_error={math.degrees(orientation_error):.3f} deg"
+            builtins.print(
+                "[LIFT COMPLETED] "
+                f"step={step}, "
+                f"distance={fingertip_error_m * 1000.0:.3f} mm, "
+                f"threshold={stop_distance_m * 1000.0:.3f} mm",
+                flush=True,
             )
-<<<<<<< HEAD
-=======
             sphere_displacement, sphere_distance = sphere_displacement_m()
             record_run_section(
                 "lift",
@@ -4333,25 +3507,16 @@ def lift_grasped_sphere(
                 },
             )
             return lifted_arm_hold_rad
->>>>>>> 417d8be (ik calculator fixed with collision offset)
 
     actual_all = as_numpy(robot.get_dof_positions())[0].astype(np.float64)
-    lifted_arm_hold_rad = actual_all[arm_indices].copy()
     robot.set_dof_position_targets(
-        lifted_arm_hold_rad, dof_indices=arm_indices
+        actual_all[arm_indices],
+        dof_indices=arm_indices,
     )
     robot.set_dof_position_targets(
-        [gripper_target_rad], dof_indices=[GRIPPER_DOF_INDEX]
+        [gripper_target_rad],
+        dof_indices=[GRIPPER_DOF_INDEX],
     )
-<<<<<<< HEAD
-    builtins.print(
-        "[LIFT COMPLETED] "
-        f"step={total_steps}, "
-        f"distance={position_error_m * 1000.0:.3f} mm, "
-        f"orientation_error={math.degrees(orientation_error):.3f} deg, "
-        f"threshold={stop_distance_m * 1000.0:.3f} mm",
-        flush=True,
-=======
     actual_fingertip_stage_units = contact_point.world_position_stage_units()
     fingertip_error_m = float(
         np.linalg.norm(
@@ -4375,9 +3540,7 @@ def lift_grasped_sphere(
         "Lift did not reach its target before the command-step limit: "
         f"steps={LIFT_COMMAND_STEPS}, "
         f"remaining_distance={fingertip_error_m * 1000.0:.3f} mm"
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     )
-    return lifted_arm_hold_rad
 
 
 def as_numpy(value: object) -> np.ndarray:
@@ -4491,8 +3654,8 @@ def align_base_with_sphere(
     return actual_angle
 
 
-def sphere_world_radius(sphere_prim: Usd.Prim) -> float:
-    """Return the radius of a uniformly scaled sphere in stage units."""
+def sphere_horizontal_radius(sphere_prim: Usd.Prim) -> float:
+    """Return the sphere's horizontal radius in stage units."""
     cache = UsdGeom.BBoxCache(
         Usd.TimeCode.Default(),
         [UsdGeom.Tokens.default_, UsdGeom.Tokens.render, UsdGeom.Tokens.proxy],
@@ -4502,13 +3665,13 @@ def sphere_world_radius(sphere_prim: Usd.Prim) -> float:
         cache.ComputeWorldBound(sphere_prim).ComputeAlignedRange().GetSize(),
         dtype=np.float64,
     )
-    radii = 0.5 * size
+    radii = 0.5 * size[:2]
     if not np.all(np.isfinite(radii)) or np.any(radii <= 0.0):
         raise RuntimeError(f"Invalid sphere world bounds: {size.tolist()}")
-    if not np.allclose(radii, radii[0], rtol=1e-3, atol=1e-6):
+    if not np.isclose(radii[0], radii[1], rtol=1e-3, atol=1e-6):
         raise RuntimeError(
-            "The target prim is not spherical: "
-            f"radii={radii.tolist()}"
+            "The target prim is not horizontally spherical: "
+            f"x radius={radii[0]}, y radius={radii[1]}"
         )
     return float(np.mean(radii))
 
@@ -4578,57 +3741,6 @@ def offset_outward_from_sphere(
     return sphere_surface_point + clearance_stage_units * outward_normal / normal_length
 
 
-<<<<<<< HEAD
-def top_down_grasp_rotation(
-    sphere_center: np.ndarray,
-    sphere_surface_grasp_point: np.ndarray,
-) -> np.ndarray:
-    """Build the fixed-fingertip rotation for an equatorial top-down grasp."""
-    tool_x = np.asarray(
-        sphere_surface_grasp_point, dtype=np.float64
-    ) - np.asarray(sphere_center, dtype=np.float64)
-    tool_x[2] = 0.0
-    tool_x_length = float(np.linalg.norm(tool_x))
-    if tool_x_length <= 1e-12:
-        raise RuntimeError("The selected sphere contact side is not horizontal")
-    tool_x /= tool_x_length
-
-    tool_z = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-    tool_y = np.cross(tool_z, tool_x)
-    tool_y /= np.linalg.norm(tool_y)
-    rotation = np.column_stack((tool_x, tool_y, tool_z))
-    if not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-9):
-        raise RuntimeError("Top-down grasp rotation is not orthonormal")
-    if not np.isclose(np.linalg.det(rotation), 1.0, atol=1e-9):
-        raise RuntimeError("Top-down grasp rotation is not right-handed")
-    return rotation
-
-
-def vertical_pose_waypoints(
-    start_position_stage_units: np.ndarray,
-    end_position_stage_units: np.ndarray,
-    rotation: np.ndarray,
-    meters_per_unit: float,
-) -> list[np.ndarray]:
-    """Return evenly spaced vertical world poses, excluding the start pose."""
-    start = np.asarray(start_position_stage_units, dtype=np.float64)
-    end = np.asarray(end_position_stage_units, dtype=np.float64)
-    horizontal_delta = float(np.linalg.norm((end - start)[:2]))
-    if horizontal_delta > 1e-9:
-        raise RuntimeError(
-            "Top-down waypoint path must be vertical, but its horizontal "
-            f"displacement is {horizontal_delta} stage units"
-        )
-    distance_m = abs(float(end[2] - start[2])) * meters_per_unit
-    waypoint_count = max(
-        1,
-        math.ceil(distance_m / POSE_IK_WAYPOINT_SPACING_M - 1e-12),
-    )
-    return [
-        make_transform(start + (end - start) * (index / waypoint_count), rotation)
-        for index in range(1, waypoint_count + 1)
-    ]
-=======
 def normalized_vector(vector: np.ndarray, label: str) -> np.ndarray:
     """Return a finite non-zero 3-vector normalized to unit length."""
     vector = np.asarray(vector, dtype=np.float64)
@@ -4721,7 +3833,6 @@ def top_down_yaw_candidates(
         )
         candidates.append((yaw_offset_deg, world_z_rotation @ nominal_rotation))
     return candidates
->>>>>>> 417d8be (ik calculator fixed with collision offset)
 
 
 def print_point(label: str, point_meters: np.ndarray) -> None:
@@ -4905,7 +4016,7 @@ def main() -> None:
 
     sphere_positions, _ = sphere.get_world_poses()
     sphere_center = as_numpy(sphere_positions)[0]
-    sphere_radius = sphere_world_radius(sphere_prim)
+    sphere_radius = sphere_horizontal_radius(sphere_prim)
     _, base_orientations = base_link.get_world_poses()
     base_orientation = as_numpy(base_orientations)[0]
     heading = base_heading_world(base_orientation, shoulder_pan_angle)
@@ -4981,22 +4092,6 @@ def main() -> None:
             "nominal_top_down_rotation": nominal_top_down_rotation,
         },
     )
-    top_down_rotation = top_down_grasp_rotation(
-        sphere_center, sphere_surface_grasp_point
-    )
-    pregrasp_point = sphere_grasp_point.copy()
-    pregrasp_point[2] = (
-        sphere_center[2]
-        + sphere_radius
-        + ARGS.pregrasp_clearance_mm / 1000.0 / meters_per_unit
-    )
-    pregrasp_pose = make_transform(pregrasp_point, top_down_rotation)
-    descent_poses = vertical_pose_waypoints(
-        pregrasp_point,
-        sphere_grasp_point,
-        top_down_rotation,
-        meters_per_unit,
-    )
 
     print()
     print(
@@ -5020,35 +4115,6 @@ def main() -> None:
         f"IK approach point ({ARGS.sphere_surface_clearance_mm:.1f} mm clearance, world)",
         sphere_grasp_point * meters_per_unit,
     )
-<<<<<<< HEAD
-    print_point(
-        f"Top-down pre-grasp point ({ARGS.pregrasp_clearance_mm:.1f} mm above sphere top, world)",
-        pregrasp_point * meters_per_unit,
-    )
-    print(
-        "Top-down fixed-fingertip axes in world: "
-        f"x={top_down_rotation[:, 0].tolist()}, "
-        f"y={top_down_rotation[:, 1].tolist()}, "
-        f"z={top_down_rotation[:, 2].tolist()}"
-    )
-    print(f"Top-down vertical-descent waypoints: {len(descent_poses)}")
-
-    draw_pre_ik_points(contact_point_world, sphere_grasp_point, pregrasp_point)
-    for _ in range(DEBUG_POINT_WAIT_STEPS):
-        SIMULATION_APP.update()
-
-    if DIAGNOSTIC_POSITION_ONLY_PREGRASP:
-        run_position_only_pregrasp_diagnostic(
-            stage=stage,
-            robot=robot,
-            base_link=base_link,
-            fingertip_offset_stage_units=contact_point_local_stage_units,
-            target_world_stage_units=pregrasp_point,
-            meters_per_unit=meters_per_unit,
-        )
-
-    pregrasp_ik_result = calculate_pose_ik_path(
-=======
     print()
     print("Prepared top-down IK geometry:")
     print(
@@ -5079,22 +4145,13 @@ def main() -> None:
     # Calculate, gate, and rank all sampled grasp paths before issuing motion.
     set_run_stage("plan_approach")
     top_down_candidate_result = calculate_top_down_candidates(
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         stage=stage,
         robot=robot,
         base_link=base_link,
         fingertip_offset_stage_units=contact_point_local_stage_units,
-<<<<<<< HEAD
-        target_world_poses_stage_units=[pregrasp_pose],
-=======
         grasp_candidates_world=grasp_candidates,
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         meters_per_unit=meters_per_unit,
-        label="Top-down pre-grasp",
     )
-<<<<<<< HEAD
-    apply_pose_ik_path(
-=======
     candidates = top_down_candidate_result["candidates"]
     assert isinstance(candidates, list)
     fallback = top_down_candidate_result.get("position_only_fallback")
@@ -5256,41 +4313,12 @@ def main() -> None:
         SIMULATION_APP.update()
     set_run_stage("execute_approach")
     arm_hold_target_rad = apply_selected_approach_path(
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         robot=robot,
-        gripper=gripper,
         contact_point=contact_point,
-<<<<<<< HEAD
-        target_world_poses_stage_units=[pregrasp_pose],
-        meters_per_unit=meters_per_unit,
-        ik_result=pregrasp_ik_result,
-        stop_distance_m=ARGS.approach_stop_distance_mm / 1000.0,
-        label="Top-down pre-grasp",
-    )
-    descent_ik_result = calculate_pose_ik_path(
-        stage=stage,
-        robot=robot,
-        base_link=base_link,
-        fingertip_offset_stage_units=contact_point_local_stage_units,
-        target_world_poses_stage_units=descent_poses,
-        meters_per_unit=meters_per_unit,
-        label="Top-down descent",
-    )
-    arm_hold_target_rad = apply_pose_ik_path(
-        robot=robot,
-        gripper=gripper,
-        contact_point=contact_point,
-        target_world_poses_stage_units=descent_poses,
-        meters_per_unit=meters_per_unit,
-        ik_result=descent_ik_result,
-        stop_distance_m=ARGS.approach_stop_distance_mm / 1000.0,
-        label="Top-down descent",
-=======
         contact_tracker=contact_tracker,
         waypoint_targets_world_stage_units=top_down_waypoints,
         meters_per_unit=meters_per_unit,
         selection=top_down_selection,
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     )
     sphere_after_approach_positions, _ = sphere.get_world_poses()
     record_run_section(
@@ -5325,13 +4353,6 @@ def main() -> None:
     lift_target_world[2] += (
         ARGS.lift_height_mm / 1000.0 / meters_per_unit
     )
-<<<<<<< HEAD
-    lift_poses = vertical_pose_waypoints(
-        lift_start_world,
-        lift_target_world,
-        top_down_rotation,
-        meters_per_unit,
-=======
     sphere_positions, _ = sphere.get_world_poses()
     sphere_lift_start_world = as_numpy(sphere_positions)[0].astype(np.float64)
     record_run_section(
@@ -5341,7 +4362,6 @@ def main() -> None:
             "target_fingertip_world_m": lift_target_world * meters_per_unit,
             "sphere_start_world_m": sphere_lift_start_world * meters_per_unit,
         },
->>>>>>> 417d8be (ik calculator fixed with collision offset)
     )
     print()
     print_point(
@@ -5352,21 +4372,15 @@ def main() -> None:
         "Lift target point (world)",
         lift_target_world * meters_per_unit,
     )
-    print(f"Orientation-holding lift waypoints: {len(lift_poses)}")
 
-<<<<<<< HEAD
-    lift_ik_result = calculate_pose_ik_path(
-=======
     set_run_stage("plan_lift")
     lift_ik_result = calculate_position_only_ik(
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         stage=stage,
         robot=robot,
         base_link=base_link,
         fingertip_offset_stage_units=contact_point_local_stage_units,
-        target_world_poses_stage_units=lift_poses,
+        target_world_stage_units=lift_target_world,
         meters_per_unit=meters_per_unit,
-        label="Orientation-holding lift",
     )
     record_run_section(
         "lift",
@@ -5380,15 +4394,10 @@ def main() -> None:
     set_run_stage("execute_lift")
     lift_grasped_sphere(
         robot=robot,
-        gripper=gripper,
         contact_point=contact_point,
-<<<<<<< HEAD
-        target_world_poses_stage_units=lift_poses,
-=======
         sphere=sphere,
         sphere_start_world_stage_units=sphere_lift_start_world,
         target_world_stage_units=lift_target_world,
->>>>>>> 417d8be (ik calculator fixed with collision offset)
         meters_per_unit=meters_per_unit,
         ik_result=lift_ik_result,
         gripper_target_rad=gripper_close_target_rad,
@@ -5411,23 +4420,6 @@ if __name__ == "__main__":
     try:
         main()
     except BaseException as error:
-<<<<<<< HEAD
-        builtins.print(
-            "\n[FATAL DIAGNOSTIC] Unhandled exception before Isaac shutdown: "
-            f"{type(error).__name__}: {error}",
-            file=sys.stderr,
-            flush=True,
-        )
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        raise
-    finally:
-        builtins.print(
-            "[IK DIAGNOSTIC] Closing Isaac SimulationApp.",
-            flush=True,
-        )
-    SIMULATION_APP.close()
-=======
         run_error = error
         RUN_SUMMARY.update(
             {
@@ -5453,4 +4445,3 @@ if __name__ == "__main__":
                 raise
         finally:
             SIMULATION_APP.close()
->>>>>>> 417d8be (ik calculator fixed with collision offset)
