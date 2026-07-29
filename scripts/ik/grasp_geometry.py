@@ -1,4 +1,4 @@
-"""Pure geometry construction for vertical sphere grasps."""
+"""Pure geometry construction for progressively angled sphere grasps."""
 
 from __future__ import annotations
 
@@ -20,18 +20,29 @@ def normalized_vector(value: object, *, label: str) -> np.ndarray:
     return vector / norm
 
 
-def vertical_approach_waypoints(
+def linear_approach_waypoints(
     final_target_world_stage_units: object,
     *,
+    approach_axis_world: object,
     meters_per_unit: float,
     hover_height_mm: float,
     descent_step_mm: float,
 ) -> list[np.ndarray]:
-    """Return hover-to-contact waypoints on a world-vertical line."""
+    """Return hover-to-contact waypoints parallel to an approach axis.
+
+    ``approach_axis_world`` points from hover toward the final target. The
+    hover point is therefore offset in the opposite direction, which keeps a
+    horizontal approach outside the sphere before it reaches the contact
+    target.
+    """
     final_target = finite_array(
         final_target_world_stage_units,
         shape=(3,),
-        label="final top-down contact target",
+        label="final approach contact target",
+    )
+    approach_axis = normalized_vector(
+        approach_axis_world,
+        label="approach axis",
     )
     scale = positive_scale(meters_per_unit, label="meters_per_unit")
     hover_height = positive_scale(hover_height_mm, label="hover_height_mm")
@@ -42,16 +53,33 @@ def vertical_approach_waypoints(
         1,
         math.ceil(hover_height_stage_units / descent_step_stage_units),
     )
-    vertical_offsets = np.linspace(
+    approach_offsets = np.linspace(
         hover_height_stage_units,
         0.0,
         num=segment_count + 1,
         dtype=np.float64,
     )
     return [
-        final_target + np.array([0.0, 0.0, offset], dtype=np.float64)
-        for offset in vertical_offsets
+        final_target - approach_axis * offset
+        for offset in approach_offsets
     ]
+
+
+def vertical_approach_waypoints(
+    final_target_world_stage_units: object,
+    *,
+    meters_per_unit: float,
+    hover_height_mm: float,
+    descent_step_mm: float,
+) -> list[np.ndarray]:
+    """Return vertical top-down waypoints via ``linear_approach_waypoints``."""
+    return linear_approach_waypoints(
+        final_target_world_stage_units,
+        approach_axis_world=[0.0, 0.0, -1.0],
+        meters_per_unit=meters_per_unit,
+        hover_height_mm=hover_height_mm,
+        descent_step_mm=descent_step_mm,
+    )
 
 
 def generate_sphere_grasp_candidates(
@@ -62,11 +90,18 @@ def generate_sphere_grasp_candidates(
     meters_per_unit: float,
     surface_clearance_m: float,
     surface_offsets_deg: Sequence[float],
-    approach_tilts_deg: Sequence[float],
     hover_height_mm: float,
     descent_step_mm: float,
+    approach_elevations_deg: Sequence[float] | None = None,
+    approach_tilts_deg: Sequence[float] | None = None,
 ) -> list[dict[str, Any]]:
-    """Sample sphere-centered grasps and safe near-vertical tool axes."""
+    """Sample sphere grasps over approach elevations above horizontal.
+
+    ``90`` degrees is a vertical top-down approach and ``0`` degrees is a
+    horizontal inward approach. ``approach_tilts_deg`` is retained temporarily
+    for callers that still express the same orientation as a tilt away from
+    vertical; callers must provide exactly one representation.
+    """
     center = finite_array(sphere_center, shape=(3,), label="sphere center")
     radius = positive_scale(sphere_radius, label="sphere_radius")
     scale = positive_scale(meters_per_unit, label="meters_per_unit")
@@ -74,6 +109,29 @@ def generate_sphere_grasp_candidates(
     if not math.isfinite(clearance_m) or clearance_m < 0.0:
         raise ValueError("surface_clearance_m must be finite and nonnegative")
     clearance_stage_units = clearance_m / scale
+    if (
+        approach_elevations_deg is None
+        and approach_tilts_deg is None
+    ) or (
+        approach_elevations_deg is not None
+        and approach_tilts_deg is not None
+    ):
+        raise ValueError(
+            "Specify exactly one of approach_elevations_deg or "
+            "approach_tilts_deg"
+        )
+    if approach_elevations_deg is not None:
+        elevation_values = list(approach_elevations_deg)
+    else:
+        assert approach_tilts_deg is not None
+        elevation_values = []
+        for tilt_value in approach_tilts_deg:
+            tilt_deg = float(tilt_value)
+            if not math.isfinite(tilt_deg) or not 0.0 <= tilt_deg <= 90.0:
+                raise ValueError("approach tilts must be finite values in [0, 90]")
+            elevation_values.append(90.0 - tilt_deg)
+    if not elevation_values:
+        raise ValueError("at least one approach elevation is required")
     nominal = finite_array(
         nominal_surface_point,
         shape=(3,),
@@ -104,29 +162,37 @@ def generate_sphere_grasp_candidates(
         inward = -radial
         surface_point = center + radius * radial
         approach_point = surface_point + clearance_stage_units * radial
-        for approach_tilt_value in approach_tilts_deg:
-            approach_tilt_deg = float(approach_tilt_value)
-            if not math.isfinite(approach_tilt_deg):
-                raise ValueError("approach tilts must be finite")
-            tilt = math.radians(approach_tilt_deg)
+        for approach_elevation_value in elevation_values:
+            approach_elevation_deg = float(approach_elevation_value)
+            if (
+                not math.isfinite(approach_elevation_deg)
+                or not 0.0 <= approach_elevation_deg <= 90.0
+            ):
+                raise ValueError(
+                    "approach elevations must be finite values in [0, 90]"
+                )
+            elevation = math.radians(approach_elevation_deg)
+            approach_tilt_deg = 90.0 - approach_elevation_deg
             target_axis_world = normalized_vector(
-                math.cos(tilt) * np.array([0.0, 0.0, -1.0])
-                + math.sin(tilt) * inward,
+                math.sin(elevation) * np.array([0.0, 0.0, -1.0])
+                + math.cos(elevation) * inward,
                 label="candidate approach axis",
             )
             candidate_id = (
-                f"surface_{surface_offset_deg:+.0f}_tilt_"
-                f"{approach_tilt_deg:.0f}"
+                f"surface_{surface_offset_deg:+.0f}_elevation_"
+                f"{approach_elevation_deg:.0f}"
             )
             candidates.append(
                 {
                     "candidate_id": candidate_id,
                     "surface_offset_deg": surface_offset_deg,
+                    "approach_elevation_deg": approach_elevation_deg,
                     "approach_tilt_deg": approach_tilt_deg,
                     "target_axis_world": target_axis_world,
                     "target_closing_axis_world": inward,
-                    "waypoints_world_stage_units": vertical_approach_waypoints(
+                    "waypoints_world_stage_units": linear_approach_waypoints(
                         approach_point,
+                        approach_axis_world=target_axis_world,
                         meters_per_unit=meters_per_unit,
                         hover_height_mm=hover_height_mm,
                         descent_step_mm=descent_step_mm,

@@ -90,7 +90,15 @@ GRASP_SURFACE_OFFSETS_DEG = (
     0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0,
     120.0, -120.0, 150.0, -150.0, 180.0,
 )
-GRASP_APPROACH_TILTS_DEG = (0.0, 15.0)
+GRASP_APPROACH_ELEVATIONS_DEG = (
+    90.0,
+    75.0,
+    60.0,
+    45.0,
+    30.0,
+    15.0,
+    0.0,
+)
 IK_COMMAND_STEPS = 300
 APPROACH_TRACKING_SETTLE_STEPS = 300
 APPROACH_TRACKING_STABLE_FRAMES = 10
@@ -1318,6 +1326,9 @@ from ik.execution_policy import (  # noqa: E402
     DescentContactDiagnostics,
     distributed_command_steps,
 )
+from ik.candidate_planning import (  # noqa: E402
+    evaluate_first_successful_elevation,
+)
 from ik.grasp_geometry import (  # noqa: E402
     generate_sphere_grasp_candidates,
 )
@@ -1800,6 +1811,7 @@ def calculate_top_down_candidates(
                 for key in (
                     "candidate_id",
                     "surface_offset_deg",
+                    "approach_elevation_deg",
                     "approach_tilt_deg",
                 )
             }
@@ -1807,14 +1819,25 @@ def calculate_top_down_candidates(
     # The official gripper_frame_link +Z axis is the tool approach axis.
     tool_axis_frame = np.array([0.0, 0.0, 1.0], dtype=np.float64)
     print()
-    print("Constrained top-down IK inputs:")
+    approach_elevations_deg = sorted(
+        {
+            float(candidate["approach_elevation_deg"])
+            for candidate in grasp_candidates_world
+        },
+        reverse=True,
+    )
+    print("Constrained approach IK inputs:")
     print(f"  Position-only seed joints (deg): {seed_joints_deg.tolist()}")
     print(f"  Candidate count: {len(grasp_candidates_world)}")
     print(
         "  Surface offsets (deg): "
         f"{list(GRASP_SURFACE_OFFSETS_DEG)}"
     )
-    print(f"  Approach tilts (deg): {list(GRASP_APPROACH_TILTS_DEG)}")
+    print(f"  Approach elevations (deg): {approach_elevations_deg}")
+    print(
+        "  Approach tilts from vertical (deg): "
+        f"{[90.0 - elevation for elevation in approach_elevations_deg]}"
+    )
     print(
         "  Constraints: TCP position (hard), tool +Z aligned to candidate "
         "axis, jaw closing axis guided and terminal-gated"
@@ -2009,6 +2032,19 @@ def calculate_top_down_candidates(
                 f"error={math.degrees(closing_errors_rad[-1]):.3f} deg "
                 f"(limit={DEFAULT_CLOSING_AXIS_TOLERANCE_DEG:.3f} deg)"
             )
+    valid_candidates = [
+        path for path in paths if path.get("status") == "valid"
+    ]
+    selected_candidate_id = result.get("selected_candidate_id")
+    if not any(
+        candidate.get("candidate_id") == selected_candidate_id
+        for candidate in valid_candidates
+    ):
+        result["selected_candidate_id"] = (
+            valid_candidates[0].get("candidate_id")
+            if valid_candidates
+            else None
+        )
     return result
 
 
@@ -2152,7 +2188,7 @@ def print_top_down_candidate_diagnostics(
     candidates = candidate_result["candidates"]
     assert isinstance(candidates, list)
     print()
-    print("Constrained top-down IK result:")
+    print("Constrained approach IK result:")
     status_counts: dict[str, int] = {}
     best_rejected_position_error_m: float | None = None
     for index, candidate in enumerate(candidates, start=1):
@@ -2178,6 +2214,7 @@ def print_top_down_candidate_diagnostics(
         candidate_label = (
             f"  #{index:02d}: id={candidate.get('candidate_id')}, "
             f"surface-offset={candidate.get('surface_offset_deg')} deg, "
+            f"elevation={candidate.get('approach_elevation_deg')} deg, "
             f"tilt={candidate.get('approach_tilt_deg')} deg"
         )
         if status == "rejected":
@@ -3765,16 +3802,12 @@ def main() -> None:
         ARGS.sphere_surface_clearance_mm / 1000.0 / meters_per_unit,
     )
 
-    grasp_candidates = generate_sphere_grasp_candidates(
-        sphere_center,
-        sphere_radius,
-        sphere_surface_grasp_point,
-        meters_per_unit=meters_per_unit,
-        surface_clearance_m=ARGS.sphere_surface_clearance_mm / 1000.0,
-        surface_offsets_deg=GRASP_SURFACE_OFFSETS_DEG,
-        approach_tilts_deg=GRASP_APPROACH_TILTS_DEG,
-        hover_height_mm=ARGS.top_down_hover_height_mm,
-        descent_step_mm=ARGS.top_down_descent_step_mm,
+    waypoint_count = (
+        1
+        + math.ceil(
+            ARGS.top_down_hover_height_mm
+            / ARGS.top_down_descent_step_mm
+        )
     )
     record_run_section(
         "target_geometry",
@@ -3797,10 +3830,8 @@ def main() -> None:
             "sphere_surface_clearance_mm": (
                 ARGS.sphere_surface_clearance_mm
             ),
-            "candidate_count": len(grasp_candidates),
-            "waypoint_count": len(
-                grasp_candidates[0]["waypoints_world_stage_units"]
-            ),
+            "candidate_count_per_elevation": len(GRASP_SURFACE_OFFSETS_DEG),
+            "waypoint_count_per_candidate": waypoint_count,
         },
     )
 
@@ -3827,25 +3858,103 @@ def main() -> None:
         nominal_approach_point * meters_per_unit,
     )
     print()
-    print("Prepared top-down IK geometry:")
-    print("  Candidate approach axes: near vertical, sampled about the sphere")
+    print("Prepared progressive approach IK geometry:")
     print(
-        "  Candidate vertical waypoints: "
-        f"{len(grasp_candidates[0]['waypoints_world_stage_units'])} "
+        "  Approach elevations (deg): "
+        f"{list(GRASP_APPROACH_ELEVATIONS_DEG)}"
+    )
+    print("  Candidate approach axes: sampled about the sphere")
+    print(
+        "  Candidate axis-aligned waypoints per elevation: "
+        f"{waypoint_count} "
         f"(hover={ARGS.top_down_hover_height_mm:.1f} mm, "
         f"max spacing={ARGS.top_down_descent_step_mm:.1f} mm)"
     )
 
-    # Calculate, gate, and rank all sampled grasp paths before issuing motion.
+    # Calculate, gate, and rank one elevation's sampled grasp paths at a time
+    # before issuing motion. The next, shallower elevation is not evaluated
+    # unless every candidate at the current elevation has failed.
     set_run_stage("plan_approach")
-    top_down_candidate_result = calculate_top_down_candidates(
-        stage=stage,
-        robot=robot,
-        base_link=base_link,
-        fingertip_offset_m=tool_model.position_in_parent_m,
-        grasp_candidates_world=grasp_candidates,
-        meters_per_unit=meters_per_unit,
+    grasp_candidates_by_elevation: dict[float, list[dict[str, object]]] = {}
+
+    def evaluate_approach_elevation(
+        elevation_deg: float,
+    ) -> dict[str, object]:
+        print()
+        print(
+            "[APPROACH ELEVATION] "
+            f"Planning {elevation_deg:.0f} deg above horizontal "
+            f"(tilt={90.0 - elevation_deg:.0f} deg from vertical)."
+        )
+        candidates_for_elevation = generate_sphere_grasp_candidates(
+            sphere_center,
+            sphere_radius,
+            sphere_surface_grasp_point,
+            meters_per_unit=meters_per_unit,
+            surface_clearance_m=ARGS.sphere_surface_clearance_mm / 1000.0,
+            surface_offsets_deg=GRASP_SURFACE_OFFSETS_DEG,
+            hover_height_mm=ARGS.top_down_hover_height_mm,
+            descent_step_mm=ARGS.top_down_descent_step_mm,
+            approach_elevations_deg=[elevation_deg],
+        )
+        grasp_candidates_by_elevation[elevation_deg] = candidates_for_elevation
+        candidate_result = calculate_top_down_candidates(
+            stage=stage,
+            robot=robot,
+            base_link=base_link,
+            fingertip_offset_m=tool_model.position_in_parent_m,
+            grasp_candidates_world=candidates_for_elevation,
+            meters_per_unit=meters_per_unit,
+        )
+        print_top_down_candidate_diagnostics(candidate_result)
+        return candidate_result
+
+    approach_fallback_result = evaluate_first_successful_elevation(
+        GRASP_APPROACH_ELEVATIONS_DEG,
+        evaluate_approach_elevation,
     )
+    if approach_fallback_result["status"] == "exhausted":
+        rejection_summary: list[str] = []
+        attempts = approach_fallback_result["attempts"]
+        assert isinstance(attempts, list)
+        for attempt in attempts:
+            assert isinstance(attempt, dict)
+            elevation_deg = float(attempt["approach_elevation_deg"])
+            candidate_result = attempt["batch"]
+            assert isinstance(candidate_result, dict)
+            candidates = candidate_result.get("candidates")
+            rejected = [
+                candidate
+                for candidate in candidates
+                if isinstance(candidate, dict)
+                and candidate.get("status") == "rejected"
+            ] if isinstance(candidates, list) else []
+            reasons = [
+                str(candidate.get("reason", "not supplied"))
+                for candidate in rejected
+            ]
+            rejection_summary.append(
+                f"{elevation_deg:.0f}deg: rejected={len(rejected)}, "
+                f"reasons={reasons}"
+            )
+        print()
+        print(
+            "[APPROACH ANGLES EXHAUSTED] No valid candidate path was "
+            "found; approach motion is intentionally not issued."
+        )
+        raise RuntimeError(
+            "No sampled grasp candidate passes the position, approach-axis, "
+            "jaw-axis, and joint-limit gates after exhausting approach "
+            f"elevations {approach_fallback_result['attempted_elevations_deg']}: "
+            f"{rejection_summary}"
+        )
+    selected_elevation_deg = approach_fallback_result[
+        "selected_approach_elevation_deg"
+    ]
+    top_down_candidate_result = approach_fallback_result["selected_batch"]
+    assert isinstance(selected_elevation_deg, float)
+    assert isinstance(top_down_candidate_result, dict)
+    grasp_candidates = grasp_candidates_by_elevation[selected_elevation_deg]
     candidates = top_down_candidate_result["candidates"]
     assert isinstance(candidates, list)
     record_run_section(
@@ -3887,6 +3996,7 @@ def main() -> None:
                         "constraint_mode",
                         "candidate_id",
                         "surface_offset_deg",
+                        "approach_elevation_deg",
                         "approach_tilt_deg",
                         "failed_waypoint_index",
                         "reason",
@@ -3915,7 +4025,6 @@ def main() -> None:
             ],
         },
     )
-    print_top_down_candidate_diagnostics(top_down_candidate_result)
     top_down_selection = select_top_down_path(top_down_candidate_result)
     selected_path = top_down_selection["path"]
     assert isinstance(selected_path, dict)
@@ -3926,6 +4035,7 @@ def main() -> None:
             "constraint_mode",
             "candidate_id",
             "surface_offset_deg",
+            "approach_elevation_deg",
             "approach_tilt_deg",
             "position_tolerance_m",
             "axis_tolerance_rad",

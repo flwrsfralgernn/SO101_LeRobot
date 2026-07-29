@@ -1,8 +1,10 @@
 import unittest
 
 from scripts.ik.candidate_planning import (
+    evaluate_first_successful_elevation,
     evaluate_first_valid_path,
     ranked_endpoint_candidates,
+    validate_approach_elevation_schedule,
 )
 
 
@@ -82,6 +84,95 @@ class EndpointPlanningTests(unittest.TestCase):
         self.assertEqual(
             candidates[2]["selected_candidate_id"], "second"
         )
+
+
+class ElevationFallbackTests(unittest.TestCase):
+    def test_fallback_attempts_elevations_in_order_and_stops_on_success(self) -> None:
+        calls: list[float] = []
+        batches = {
+            90.0: {
+                "selected_candidate_id": None,
+                "candidates": [{"candidate_id": "top", "status": "rejected"}],
+            },
+            75.0: {
+                "selected_candidate_id": "angled",
+                "candidates": [{"candidate_id": "angled", "status": "valid"}],
+            },
+        }
+
+        def evaluate_batch(elevation_deg: float) -> dict[str, object]:
+            calls.append(elevation_deg)
+            return batches[elevation_deg]
+
+        result = evaluate_first_successful_elevation(
+            [90.0, 75.0, 60.0],
+            evaluate_batch,
+        )
+
+        self.assertEqual(calls, [90.0, 75.0])
+        self.assertEqual(result["status"], "selected")
+        self.assertEqual(result["attempted_elevations_deg"], [90.0, 75.0])
+        self.assertEqual(result["selected_approach_elevation_deg"], 75.0)
+        self.assertEqual(result["selected_candidate_id"], "angled")
+        self.assertIs(result["selected_batch"], batches[75.0])
+        self.assertIs(result["attempts"][0]["batch"], batches[90.0])
+
+    def test_fallback_retains_all_attempts_when_elevations_are_exhausted(self) -> None:
+        calls: list[float] = []
+
+        def evaluate_batch(elevation_deg: float) -> dict[str, object]:
+            calls.append(elevation_deg)
+            return {
+                "selected_candidate_id": None,
+                "candidates": [
+                    {
+                        "candidate_id": f"candidate_{elevation_deg:.0f}",
+                        "status": "rejected",
+                        "reason": "joint limit",
+                    }
+                ],
+                "planning_metrics": {"full_paths_evaluated": 0},
+            }
+
+        result = evaluate_first_successful_elevation(
+            [90.0, 75.0, 0.0],
+            evaluate_batch,
+        )
+
+        self.assertEqual(calls, [90.0, 75.0, 0.0])
+        self.assertEqual(result["status"], "exhausted")
+        self.assertEqual(result["attempted_elevations_deg"], [90.0, 75.0, 0.0])
+        self.assertIsNone(result["selected_approach_elevation_deg"])
+        self.assertIsNone(result["selected_candidate_id"])
+        self.assertIsNone(result["selected_batch"])
+        self.assertEqual(
+            result["attempts"][2]["batch"]["candidates"][0]["reason"],
+            "joint limit",
+        )
+
+    def test_elevation_schedule_requires_descending_finite_values_in_range(self) -> None:
+        self.assertEqual(
+            validate_approach_elevation_schedule([90.0, 75.0, 0.0]),
+            [90.0, 75.0, 0.0],
+        )
+        for invalid_schedule, message in (
+            ([], "must not be empty"),
+            ([90.0, 90.0], "strictly descending"),
+            ([75.0, 90.0], "strictly descending"),
+            ([91.0], r"\[0, 90\]"),
+        ):
+            with self.subTest(schedule=invalid_schedule):
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_approach_elevation_schedule(invalid_schedule)
+
+    def test_fallback_rejects_malformed_batch_results(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing selected_candidate_id"):
+            evaluate_first_successful_elevation([90.0], lambda _: {})
+        with self.assertRaisesRegex(TypeError, "must be a string or None"):
+            evaluate_first_successful_elevation(
+                [90.0],
+                lambda _: {"selected_candidate_id": 42},
+            )
 
 
 if __name__ == "__main__":
