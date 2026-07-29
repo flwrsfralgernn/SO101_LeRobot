@@ -159,25 +159,6 @@ def frame_point_meters_in_world_stage(
     return meters_to_stage(point_world_m, meters_per_unit)
 
 
-def world_rotation_in_frame(
-    world_rotation: object,
-    world_from_frame_meters: object,
-) -> np.ndarray:
-    """Express a world-from-tool rotation relative to a local frame."""
-    target_rotation = require_rotation_matrix(
-        world_rotation,
-        label="world rotation",
-    )
-    frame_transform = require_transform(
-        world_from_frame_meters,
-        label="world_from_frame",
-    )
-    return require_rotation_matrix(
-        frame_transform[:3, :3].T @ target_rotation,
-        label="frame rotation",
-    )
-
-
 def resolve_named_indices(
     actual_names: Sequence[object],
     required_names: Sequence[str],

@@ -49,7 +49,6 @@ BASE_REFERENCE_PRIM_PATH = (
     f"{BASE_LINK_PRIM_PATH}/visuals/base_motor_holder_so101_v1"
 )
 FIXED_FINGER_PRIM_PATH = f"{ROBOT_PRIM_PATH}/gripper"
-LEGACY_CONTACT_POINT_PRIM_PATH = f"{FIXED_FINGER_PRIM_PATH}/contactPoint"
 MOVING_JAW_PRIM_PATH = f"{ROBOT_PRIM_PATH}/jaw"
 SPHERE_PRIM_PATH = "/Sphere"
 SHOULDER_PAN_DOF_NAME = "shoulder_pan"
@@ -87,7 +86,6 @@ IK_SEED_REGULARIZATION_WEIGHT = 1e-4
 IK_CLOSING_AXIS_WEIGHT = 0.5
 DEFAULT_TOP_DOWN_HOVER_HEIGHT_MM = 70.0
 DEFAULT_TOP_DOWN_DESCENT_STEP_MM = 10.0
-DEFAULT_TOP_DOWN_YAW_OFFSETS_DEG = (-30.0, -15.0, 0.0, 15.0, 30.0)
 GRASP_SURFACE_OFFSETS_DEG = (
     0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0,
     120.0, -120.0, 150.0, -150.0, 180.0,
@@ -104,7 +102,6 @@ DEFAULT_ARM_STIFFNESS_MULTIPLIER = 4.0
 DEFAULT_ARM_DAMPING_MULTIPLIER = 0.1
 DEBUG_POINT_WAIT_STEPS = 45
 DEBUG_IK_AXIS_LENGTH_MM = 50.0
-DEBUG_IK_CANDIDATE_AXIS_LENGTH_MM = 35.0
 # Keep the URDF fixed-finger tool point outside the object until jaw closure.
 DEFAULT_SPHERE_SURFACE_CLEARANCE_MM = 5.0
 TOOL_MODEL_POSITION_TOLERANCE_M = 0.001
@@ -193,7 +190,7 @@ def lerobot_worker_main() -> int:
         seed_joints_deg: worker_np.ndarray,
         target_position_m: worker_np.ndarray,
         max_iterations: int,
-        tolerance_m: float | None,
+        tolerance_m: float,
     ) -> dict[str, object]:
         """Solve a fingertip position target using the existing IK behavior."""
         joints_deg = seed_joints_deg.copy()
@@ -224,11 +221,9 @@ def lerobot_worker_main() -> int:
             position_error_m = float(
                 worker_np.linalg.norm(solved_pose[:3, 3] - target_position_m)
             )
-            if tolerance_m is not None and position_error_m <= tolerance_m:
+            if position_error_m <= tolerance_m:
                 break
-        if tolerance_m is None:
-            status = "best_effort"
-        elif position_error_m <= tolerance_m:
+        if position_error_m <= tolerance_m:
             status = "converged"
         else:
             status = "not_converged"
@@ -300,7 +295,9 @@ def lerobot_worker_main() -> int:
             self.closing_task.configure(
                 "jaw_closing_axis",
                 "soft",
-                max(float(closing_axis_weight), 1e-12),
+                # At the hover waypoint, closing guidance intentionally
+                # fades to zero while the task remains configured.
+                max(closing_axis_weight, 1e-12),
             )
             self.seed_task.set_joints(
                 {
@@ -328,38 +325,24 @@ def lerobot_worker_main() -> int:
         max_iterations: int,
         position_tolerance_m: float,
         axis_tolerance_rad: float,
-        seed_regularization_weight: float,
         lower_joint_limits_deg: worker_np.ndarray,
         upper_joint_limits_deg: worker_np.ndarray,
-        tool_closing_axis_frame: worker_np.ndarray | None = None,
-        target_closing_axis_world: worker_np.ndarray | None = None,
-        closing_axis_weight: float = 0.0,
-        closing_axis_tolerance_rad: float = math.pi,
-        solver_context: PositionAxisSolverContext | None = None,
+        tool_closing_axis_frame: worker_np.ndarray,
+        target_closing_axis_world: worker_np.ndarray,
+        closing_axis_weight: float,
+        closing_axis_tolerance_rad: float,
+        solver_context: PositionAxisSolverContext,
     ) -> tuple[dict[str, object] | None, str | None]:
         """Solve hard position with soft approach and jaw-axis guidance."""
-        if tool_closing_axis_frame is None:
-            tool_closing_axis_frame = worker_np.array(
-                [1.0, 0.0, 0.0], dtype=worker_np.float64
-            )
-        if target_closing_axis_world is None:
-            target_closing_axis_world = worker_np.array(
-                [1.0, 0.0, 0.0], dtype=worker_np.float64
-            )
-        context = solver_context or PositionAxisSolverContext(
-            tool_axis_frame,
-            tool_closing_axis_frame,
-            seed_regularization_weight,
-        )
-        context.reset(
+        solver_context.reset(
             seed_joints_deg,
             target_position_m,
             target_axis_world,
             target_closing_axis_world,
             closing_axis_weight,
         )
-        robot = context.robot
-        solver = context.solver
+        robot = solver_context.robot
+        solver = solver_context.solver
 
         best_state: dict[str, object] | None = None
         rejection_reason = "Position-axis IK produced no finite in-limit state"
@@ -369,7 +352,7 @@ def lerobot_worker_main() -> int:
         for iteration in range(1, max_iterations + 1):
             try:
                 solver.solve(True)
-                context.solver_iterations += 1
+                solver_context.solver_iterations += 1
             except RuntimeError as error:
                 rejection_reason = f"Position-axis QP failed: {error}"
                 break
@@ -414,18 +397,13 @@ def lerobot_worker_main() -> int:
                 solved_axis_world,
                 target_axis_world,
             )
-            closing_axis_error_rad = 0.0
-            if (
-                tool_closing_axis_frame is not None
-                and target_closing_axis_world is not None
-            ):
-                solved_closing_axis_world = (
-                    solved_pose[:3, :3] @ tool_closing_axis_frame
-                )
-                closing_axis_error_rad = axis_alignment_error_rad(
-                    solved_closing_axis_world,
-                    target_closing_axis_world,
-                )
+            solved_closing_axis_world = (
+                solved_pose[:3, :3] @ tool_closing_axis_frame
+            )
+            closing_axis_error_rad = axis_alignment_error_rad(
+                solved_closing_axis_world,
+                target_closing_axis_world,
+            )
             candidate = {
                 "joints_deg": joints_deg.tolist(),
                 "solved_position_m": solved_pose[:3, 3].tolist(),
@@ -467,7 +445,7 @@ def lerobot_worker_main() -> int:
                 and axis_error_rad <= axis_tolerance_rad
                 and closing_axis_error_rad <= closing_axis_tolerance_rad
             ):
-                context.last_solve_diagnostics = {
+                solver_context.last_solve_diagnostics = {
                     "iterations": iteration,
                     "position_error_m": position_error_m,
                     "axis_error_rad": axis_error_rad,
@@ -486,7 +464,7 @@ def lerobot_worker_main() -> int:
                 f"closing-axis={math.degrees(float(best_state['closing_axis_error_rad'])):.3f} deg "
                 f"(limit={math.degrees(closing_axis_tolerance_rad):.3f} deg)"
             )
-        context.last_solve_diagnostics = {
+        solver_context.last_solve_diagnostics = {
             "iterations": iteration,
             "position_error_m": (
                 float(best_state["position_error_m"])
@@ -524,7 +502,7 @@ def lerobot_worker_main() -> int:
         lower_joint_limits_deg: worker_np.ndarray,
         upper_joint_limits_deg: worker_np.ndarray,
     ) -> tuple[dict[str, object] | None, str | None]:
-        """Return the best position-only state at one fallback waypoint."""
+        """Return the best in-limit position-only state for an IK seed."""
         target_pose = worker_np.asarray(
             checked_fk(kinematics, seed_joints_deg),
             dtype=worker_np.float64,
@@ -602,28 +580,17 @@ def lerobot_worker_main() -> int:
         max_iterations: int,
         position_tolerance_m: float,
         axis_tolerance_rad: float,
-        seed_regularization_weight: float,
         lower_joint_limits_deg: worker_np.ndarray,
         upper_joint_limits_deg: worker_np.ndarray,
         metadata: dict[str, object],
         tool_closing_axis_frame: worker_np.ndarray,
         target_closing_axis_world: worker_np.ndarray,
         closing_axis_weight: float,
-        closing_axis_tolerance_rad: float,
         endpoint_state: dict[str, object],
         solver_context: PositionAxisSolverContext,
     ) -> dict[str, object]:
         """Expand one feasible endpoint without solving it a second time."""
         candidate = dict(metadata)
-        candidate.update(
-            {
-                "constraint_mode": "position_hard_axis_gated",
-                "position_tolerance_m": position_tolerance_m,
-                "axis_tolerance_rad": axis_tolerance_rad,
-                "target_axis_world": target_axis_world.tolist(),
-                "waypoint_target_positions_m": waypoint_positions_m.tolist(),
-            }
-        )
         reverse_states: list[dict[str, object]] = [dict(endpoint_state)]
         waypoint_seed = worker_np.asarray(
             endpoint_state["joints_deg"],
@@ -644,17 +611,12 @@ def lerobot_worker_main() -> int:
                 max_iterations,
                 position_tolerance_m,
                 axis_tolerance_rad,
-                seed_regularization_weight,
                 lower_joint_limits_deg,
                 upper_joint_limits_deg,
                 tool_closing_axis_frame,
                 target_closing_axis_world,
                 closing_axis_weight * closing_progress,
-                (
-                    closing_axis_tolerance_rad
-                    if reverse_index == 0
-                    else math.pi
-                ),
+                math.pi,
                 solver_context,
             )
             if state is None:
@@ -836,9 +798,12 @@ def lerobot_worker_main() -> int:
         tool_closing_axis_frame = request_array(
             "tool_closing_axis_frame", (3,)
         )
-        tool_closing_axis_frame /= worker_np.linalg.norm(
-            tool_closing_axis_frame
+        tool_closing_axis_norm = float(
+            worker_np.linalg.norm(tool_closing_axis_frame)
         )
+        if tool_closing_axis_norm <= 1e-12:
+            raise ValueError("Tool closing axis must have nonzero length")
+        tool_closing_axis_frame /= tool_closing_axis_norm
         closing_axis_weight = float(request["closing_axis_weight"])
         closing_axis_tolerance_rad = float(
             request["closing_axis_tolerance_rad"]
@@ -861,8 +826,19 @@ def lerobot_worker_main() -> int:
         seed_regularization_weight = float(request["seed_regularization_weight"])
         if max_iterations <= 0:
             raise ValueError("max_iterations must be positive")
-        if position_tolerance_m <= 0.0 or axis_tolerance_rad <= 0.0:
-            raise ValueError("Candidate residual tolerances must be positive")
+        if (
+            not math.isfinite(position_tolerance_m)
+            or position_tolerance_m <= 0.0
+            or not math.isfinite(axis_tolerance_rad)
+            or not 0.0 < axis_tolerance_rad < math.pi
+            or not math.isfinite(closing_axis_weight)
+            or closing_axis_weight <= 0.0
+            or not math.isfinite(closing_axis_tolerance_rad)
+            or not 0.0 < closing_axis_tolerance_rad <= math.pi
+            or not math.isfinite(seed_regularization_weight)
+            or seed_regularization_weight <= 0.0
+        ):
+            raise ValueError("Candidate solver configuration is invalid")
 
         planning_started = time.perf_counter()
         solver_context = PositionAxisSolverContext(
@@ -939,7 +915,6 @@ def lerobot_worker_main() -> int:
                     max_iterations,
                     position_tolerance_m,
                     axis_tolerance_rad,
-                    seed_regularization_weight,
                     lower_joint_limits_deg,
                     upper_joint_limits_deg,
                     tool_closing_axis_frame,
@@ -1012,14 +987,12 @@ def lerobot_worker_main() -> int:
                     max_iterations,
                     position_tolerance_m,
                     axis_tolerance_rad,
-                    seed_regularization_weight,
                     lower_joint_limits_deg,
                     upper_joint_limits_deg,
                     candidate,
                     tool_closing_axis_frame,
                     candidate_closing_axes[candidate_index],
                     closing_axis_weight,
-                    closing_axis_tolerance_rad,
                     endpoint_states[candidate_index],
                     solver_context,
                 )
@@ -1055,258 +1028,6 @@ def lerobot_worker_main() -> int:
                 "full_path_duration_seconds": full_path_duration_seconds,
                 "total_planning_duration_seconds": planning_duration_seconds,
             },
-        }
-    elif operation == "top_down_candidates":
-        fingertip_offset_m = request_array("fingertip_offset_m", (3,))
-        seed_joints_deg = request_array(
-            "seed_joints_deg",
-            (len(ARM_JOINT_NAMES),),
-        )
-        waypoint_positions_m = worker_np.asarray(
-            request["waypoint_positions_m"],
-            dtype=worker_np.float64,
-        )
-        if (
-            waypoint_positions_m.ndim != 2
-            or waypoint_positions_m.shape[0] < 2
-            or waypoint_positions_m.shape[1] != 3
-            or not worker_np.all(worker_np.isfinite(waypoint_positions_m))
-        ):
-            raise ValueError(
-                "waypoint_positions_m must be at least two finite three-vectors"
-            )
-        tool_axis_frame = request_array("tool_axis_frame", (3,))
-        target_axis_world = request_array("target_axis_world", (3,))
-        tool_axis_norm = float(worker_np.linalg.norm(tool_axis_frame))
-        target_axis_norm = float(worker_np.linalg.norm(target_axis_world))
-        if tool_axis_norm <= 1e-12 or target_axis_norm <= 1e-12:
-            raise ValueError("Tool and target axes must have nonzero length")
-        tool_axis_frame = tool_axis_frame / tool_axis_norm
-        target_axis_world = target_axis_world / target_axis_norm
-        lower_joint_limits_deg = request_array(
-            "lower_joint_limits_deg",
-            (len(ARM_JOINT_NAMES),),
-        )
-        upper_joint_limits_deg = request_array(
-            "upper_joint_limits_deg",
-            (len(ARM_JOINT_NAMES),),
-        )
-        joint_limit_violations(
-            lower_joint_limits_deg,
-            lower_joint_limits_deg,
-            upper_joint_limits_deg,
-            ARM_JOINT_NAMES,
-        )
-        max_iterations = int(request["max_iterations"])
-        position_tolerance_m = float(request["position_tolerance_m"])
-        axis_tolerance_rad = float(request["axis_tolerance_rad"])
-        seed_regularization_weight = float(
-            request["seed_regularization_weight"]
-        )
-        if max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
-        if not math.isfinite(position_tolerance_m) or position_tolerance_m <= 0.0:
-            raise ValueError("position_tolerance_m must be positive and finite")
-        if not math.isfinite(axis_tolerance_rad) or not (
-            0.0 < axis_tolerance_rad < math.pi
-        ):
-            raise ValueError("axis_tolerance_rad must be in the range (0, pi)")
-        if not math.isfinite(seed_regularization_weight) or not (
-            0.0 < seed_regularization_weight <= 1.0
-        ):
-            raise ValueError(
-                "seed_regularization_weight must be in the range (0, 1]"
-            )
-
-        final_target_position_m = waypoint_positions_m[-1]
-        with tempfile.TemporaryDirectory(prefix="so101_top_down_ik_") as temp_dir:
-            kinematics = make_fingertip_kinematics(
-                fingertip_offset_m,
-                temp_dir,
-            )
-            position_seed = solve_position_only(
-                kinematics,
-                seed_joints_deg,
-                final_target_position_m,
-                max_iterations,
-                None,
-            )
-            position_seed_joints_deg = worker_np.asarray(
-                position_seed["solved_joints_deg"],
-                dtype=worker_np.float64,
-            )
-            if joint_limit_violations(
-                position_seed_joints_deg,
-                lower_joint_limits_deg,
-                upper_joint_limits_deg,
-                ARM_JOINT_NAMES,
-            ):
-                raise RuntimeError("Position-only seed violates arm joint limits")
-
-            reverse_waypoint_states: list[dict[str, object]] = []
-            candidate_reason: str | None = None
-            waypoint_seed_joints_deg = position_seed_joints_deg.copy()
-            for waypoint_position_m in waypoint_positions_m[::-1]:
-                waypoint_state, rejection_reason = solve_position_axis_waypoint(
-                    waypoint_seed_joints_deg,
-                    waypoint_position_m,
-                    tool_axis_frame,
-                    target_axis_world,
-                    max_iterations,
-                    position_tolerance_m,
-                    axis_tolerance_rad,
-                    seed_regularization_weight,
-                    lower_joint_limits_deg,
-                    upper_joint_limits_deg,
-                )
-                if waypoint_state is None:
-                    candidate_reason = rejection_reason
-                    break
-                reverse_waypoint_states.append(waypoint_state)
-                waypoint_seed_joints_deg = worker_np.asarray(
-                    waypoint_state["joints_deg"],
-                    dtype=worker_np.float64,
-                )
-
-            constrained_candidate: dict[str, object] = {
-                "constraint_mode": "position_hard_axis_gated",
-                "position_tolerance_m": position_tolerance_m,
-                "axis_tolerance_rad": axis_tolerance_rad,
-            }
-            if candidate_reason is not None:
-                constrained_candidate.update(
-                    {
-                        "status": "rejected",
-                        "reason": candidate_reason,
-                    }
-                )
-                candidates: list[dict[str, object]] = [constrained_candidate]
-            else:
-                waypoint_states = list(reversed(reverse_waypoint_states))
-                waypoint_position_errors_m = [
-                    float(state["position_error_m"])
-                    for state in waypoint_states
-                ]
-                waypoint_axis_errors_rad = [
-                    float(state["axis_error_rad"])
-                    for state in waypoint_states
-                ]
-                waypoint_solved_positions_m = [
-                    state["solved_position_m"] for state in waypoint_states
-                ]
-                waypoint_solved_axes_world = [
-                    state["solved_axis_world"] for state in waypoint_states
-                ]
-                waypoint_joints_deg = worker_np.asarray(
-                    [state["joints_deg"] for state in waypoint_states],
-                    dtype=worker_np.float64,
-                )
-                constrained_candidate.update(
-                    {
-                        "status": "valid",
-                        "waypoint_joints_deg": waypoint_joints_deg.tolist(),
-                        "waypoint_solved_positions_m": waypoint_solved_positions_m,
-                        "waypoint_solved_axes_world": waypoint_solved_axes_world,
-                        "waypoint_position_errors_m": waypoint_position_errors_m,
-                        "waypoint_axis_errors_rad": waypoint_axis_errors_rad,
-                        "max_position_error_m": max(waypoint_position_errors_m),
-                        "terminal_position_error_m": waypoint_position_errors_m[-1],
-                        "max_axis_error_rad": max(waypoint_axis_errors_rad),
-                        "terminal_axis_error_rad": waypoint_axis_errors_rad[-1],
-                        "total_joint_travel_deg": float(
-                            worker_np.sum(
-                                worker_np.linalg.norm(
-                                    worker_np.diff(waypoint_joints_deg, axis=0),
-                                    axis=1,
-                                )
-                            )
-                        ),
-                    }
-                )
-                candidates = [constrained_candidate]
-
-            # The fallback follows the identical hover-to-contact Cartesian
-            # path but deliberately leaves orientation unconstrained. Build it
-            # here so it uses the same validated temporary fingertip model,
-            # seed and limits as the oriented branches.
-            reverse_fallback_states: list[dict[str, object]] = [
-                {
-                    "joints_deg": position_seed_joints_deg.tolist(),
-                    "position_error_m": float(
-                        position_seed["position_error_m"]
-                    ),
-                    "solved_position_m": position_seed["solved_position_m"],
-                    "iterations": int(position_seed["iterations"]),
-                }
-            ]
-            fallback_reason: str | None = None
-            fallback_seed_joints_deg = position_seed_joints_deg.copy()
-            for waypoint_position_m in waypoint_positions_m[-2::-1]:
-                fallback_state, rejection_reason = solve_position_waypoint(
-                    kinematics,
-                    fallback_seed_joints_deg,
-                    waypoint_position_m,
-                    max_iterations,
-                    lower_joint_limits_deg,
-                    upper_joint_limits_deg,
-                )
-                if fallback_state is None:
-                    fallback_reason = rejection_reason
-                    break
-                reverse_fallback_states.append(fallback_state)
-                fallback_seed_joints_deg = worker_np.asarray(
-                    fallback_state["joints_deg"],
-                    dtype=worker_np.float64,
-                )
-
-            if fallback_reason is not None:
-                position_only_fallback: dict[str, object] = {
-                    "status": "rejected",
-                    "reason": fallback_reason,
-                }
-            else:
-                fallback_states = list(reversed(reverse_fallback_states))
-                fallback_waypoint_joints_deg = worker_np.asarray(
-                    [state["joints_deg"] for state in fallback_states],
-                    dtype=worker_np.float64,
-                )
-                fallback_position_errors_m = [
-                    float(state["position_error_m"])
-                    for state in fallback_states
-                ]
-                fallback_solved_positions_m = [
-                    state["solved_position_m"] for state in fallback_states
-                ]
-                position_only_fallback = {
-                    "status": "valid",
-                    "waypoint_joints_deg": (
-                        fallback_waypoint_joints_deg.tolist()
-                    ),
-                    "waypoint_solved_positions_m": fallback_solved_positions_m,
-                    "waypoint_position_errors_m": fallback_position_errors_m,
-                    "max_position_error_m": max(fallback_position_errors_m),
-                    "terminal_position_error_m": fallback_position_errors_m[-1],
-                    "total_joint_travel_deg": float(
-                        worker_np.sum(
-                            worker_np.linalg.norm(
-                                worker_np.diff(
-                                    fallback_waypoint_joints_deg,
-                                    axis=0,
-                                ),
-                                axis=1,
-                            )
-                        )
-                    ),
-                }
-
-        result = {
-            "status": "generated",
-            "joint_names": ARM_JOINT_NAMES,
-            "position_seed": position_seed,
-            "waypoint_positions_m": waypoint_positions_m.tolist(),
-            "candidate_count": len(candidates),
-            "candidates": candidates,
-            "position_only_fallback": position_only_fallback,
         }
     else:
         raise ValueError(
@@ -1393,8 +1114,8 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help=(
-            "Draw the interpreted grasp geometry, target approach, yaw "
-            "directions, and final residual in the Isaac viewport "
+            "Draw the interpreted grasp geometry, target approach, and final "
+            "residual in the Isaac viewport "
             "(default: enabled)"
         ),
     )
@@ -1453,17 +1174,6 @@ def parse_args() -> argparse.Namespace:
             "Radial stand-off between the sphere surface and the URDF "
             "fixed-finger tool point before jaw closure "
             f"(default: {DEFAULT_SPHERE_SURFACE_CLEARANCE_MM:.1f} mm)"
-        ),
-    )
-    parser.add_argument(
-        "--top-down-yaw-offsets-deg",
-        type=float,
-        nargs="+",
-        default=list(DEFAULT_TOP_DOWN_YAW_OFFSETS_DEG),
-        help=(
-            "Yaw targets, in degrees around the geometry-derived nominal "
-            "top-down pose "
-            f"(default: {' '.join(str(value) for value in DEFAULT_TOP_DOWN_YAW_OFFSETS_DEG)})"
         ),
     )
     parser.add_argument(
@@ -1527,10 +1237,6 @@ def parse_args() -> argparse.Namespace:
         or args.sphere_surface_clearance_mm < 0.0
     ):
         parser.error("--sphere-surface-clearance-mm must be nonnegative")
-    if not args.top_down_yaw_offsets_deg or not all(
-        math.isfinite(value) for value in args.top_down_yaw_offsets_deg
-    ):
-        parser.error("--top-down-yaw-offsets-deg must contain finite values")
     if (
         not math.isfinite(args.top_down_position_tolerance_mm)
         or args.top_down_position_tolerance_mm <= 0.0
@@ -1566,7 +1272,6 @@ RUN_SUMMARY: dict[str, object] = {
         "top_down_hover_height_mm": ARGS.top_down_hover_height_mm,
         "top_down_descent_step_mm": ARGS.top_down_descent_step_mm,
         "sphere_surface_clearance_mm": ARGS.sphere_surface_clearance_mm,
-        "top_down_yaw_offsets_deg": ARGS.top_down_yaw_offsets_deg,
         "top_down_position_tolerance_mm": (
             ARGS.top_down_position_tolerance_mm
         ),
@@ -1615,7 +1320,6 @@ from ik.execution_policy import (  # noqa: E402
 )
 from ik.grasp_geometry import (  # noqa: E402
     generate_sphere_grasp_candidates,
-    vertical_approach_waypoints,
 )
 from ik.tool_model import (  # noqa: E402
     FixedToolModel,
@@ -1951,7 +1655,7 @@ def calculate_position_only_ik(
     stage: Usd.Stage,
     robot: Articulation,
     base_link: XformPrim,
-    fingertip_offset_stage_units: np.ndarray,
+    fingertip_offset_m: np.ndarray,
     target_world_stage_units: np.ndarray,
     meters_per_unit: float,
 ) -> dict[str, object]:
@@ -1975,11 +1679,6 @@ def calculate_position_only_ik(
         world_from_lerobot_base,
         meters_per_unit,
     )
-    fingertip_offset_m = stage_to_meters(
-        fingertip_offset_stage_units,
-        meters_per_unit,
-    )
-
     print()
     print("Position-only IK inputs:")
     print(f"  Joint order: {ARM_JOINT_NAMES}")
@@ -2047,7 +1746,7 @@ def calculate_top_down_candidates(
     stage: Usd.Stage,
     robot: Articulation,
     base_link: XformPrim,
-    fingertip_offset_stage_units: np.ndarray,
+    fingertip_offset_m: np.ndarray,
     grasp_candidates_world: list[dict[str, object]],
     meters_per_unit: float,
 ) -> dict[str, object]:
@@ -2100,22 +1799,13 @@ def calculate_top_down_candidates(
                 key: candidate[key]
                 for key in (
                     "candidate_id",
-                    "target_kind",
                     "surface_offset_deg",
                     "approach_tilt_deg",
-                    "surface_clearance_m",
                 )
             }
         )
     # The official gripper_frame_link +Z axis is the tool approach axis.
-    # Align it with each sampled approach axis while intentionally leaving yaw
-    # about that axis unconstrained; a 5-DOF arm can satisfy these five task
-    # dimensions.
     tool_axis_frame = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-    fingertip_offset_m = stage_to_meters(
-        fingertip_offset_stage_units,
-        meters_per_unit,
-    )
     print()
     print("Constrained top-down IK inputs:")
     print(f"  Position-only seed joints (deg): {seed_joints_deg.tolist()}")
@@ -2125,8 +1815,10 @@ def calculate_top_down_candidates(
         f"{list(GRASP_SURFACE_OFFSETS_DEG)}"
     )
     print(f"  Approach tilts (deg): {list(GRASP_APPROACH_TILTS_DEG)}")
-    print("  Constraints: TCP position (hard), tool +Z aligned to candidate axis")
-    print("  Rotation about tool approach axis: unconstrained")
+    print(
+        "  Constraints: TCP position (hard), tool +Z aligned to candidate "
+        "axis, jaw closing axis guided and terminal-gated"
+    )
     print(
         "  Residual gates: "
         f"position <= {ARGS.top_down_position_tolerance_mm:.3f} mm, "
@@ -2193,10 +1885,9 @@ def calculate_top_down_candidates(
             "Constrained candidate worker returned an unexpected status: "
             f"{result.get('status')!r}"
         )
-    paths: list[object] = []
-    candidates = result.get("candidates")
-    if isinstance(candidates, list):
-        paths.extend(candidates)
+    paths = result.get("candidates")
+    if not isinstance(paths, list):
+        raise RuntimeError("Constrained candidate worker did not return a list")
     if len(paths) != len(grasp_candidates_world):
         raise RuntimeError(
             "Constrained candidate worker returned the wrong number of "
@@ -2206,10 +1897,9 @@ def calculate_top_down_candidates(
     expected_candidate_ids = [
         candidate["candidate_id"] for candidate in grasp_candidates_world
     ]
-    returned_candidate_ids = [
-        path.get("candidate_id") if isinstance(path, dict) else None
-        for path in paths
-    ]
+    if not all(isinstance(path, dict) for path in paths):
+        raise RuntimeError("LeRobot candidate result is not a mapping")
+    returned_candidate_ids = [path["candidate_id"] for path in paths]
     if sorted(returned_candidate_ids, key=str) != sorted(
         expected_candidate_ids, key=str
     ):
@@ -2219,12 +1909,14 @@ def calculate_top_down_candidates(
             f"expected={expected_candidate_ids}, "
             f"received={returned_candidate_ids}"
         )
+    source_by_candidate_id = {
+        candidate["candidate_id"]: candidate
+        for candidate in grasp_candidates_world
+    }
     expected_shape = (len(candidate_waypoint_positions_m[0]), 3)
     for path in paths:
-        if not isinstance(path, dict):
-            raise RuntimeError("LeRobot candidate result is not a mapping")
         waypoint_targets_m = np.asarray(
-            path.get("waypoint_target_positions_m"), dtype=np.float64
+            path["waypoint_target_positions_m"], dtype=np.float64
         )
         if (
             waypoint_targets_m.shape != expected_shape
@@ -2241,10 +1933,10 @@ def calculate_top_down_candidates(
             ).tolist()
             for target_position_m in waypoint_targets_m
         ]
-        if path.get("status") != "valid":
+        if path["status"] != "valid":
             continue
         solved_positions_m = np.asarray(
-            path.get("waypoint_solved_positions_m"),
+            path["waypoint_solved_positions_m"],
             dtype=np.float64,
         )
         if (
@@ -2263,23 +1955,14 @@ def calculate_top_down_candidates(
             for solved_position_m in solved_positions_m
         ]
         solved_rotations = np.asarray(
-            path.get("waypoint_solved_rotations"), dtype=np.float64
+            path["waypoint_solved_rotations"], dtype=np.float64
         )
         if solved_rotations.shape != (expected_shape[0], 3, 3):
             raise RuntimeError(
                 "LeRobot candidate is missing solved waypoint rotations"
             )
-        candidate_id = path.get("candidate_id")
-        source_candidate = next(
-            (
-                candidate
-                for candidate in grasp_candidates_world
-                if candidate.get("candidate_id") == candidate_id
-            ),
-            None,
-        )
-        if source_candidate is None:
-            raise RuntimeError(f"Missing source geometry for {candidate_id}")
+        candidate_id = path["candidate_id"]
+        source_candidate = source_by_candidate_id[candidate_id]
         desired_closing_world = normalized_vector(
             np.asarray(
                 source_candidate["target_closing_axis_world"],
@@ -2612,17 +2295,6 @@ def print_top_down_candidate_diagnostics(
             f"duration={float(planning_metrics.get('total_planning_duration_seconds', 0.0)):.3f} s"
         )
 
-    fallback = candidate_result.get("position_only_fallback")
-    if isinstance(fallback, dict):
-        if fallback["status"] == "rejected":
-            print(f"  Position-only fallback: rejected={fallback['reason']}")
-        else:
-            print(
-                "  Position-only fallback: status=valid, "
-                f"max-position={float(fallback['max_position_error_m']) * 1000.0:.3f} mm"
-            )
-
-
 def print_top_down_candidate_selection(
     selection: dict[str, object],
 ) -> None:
@@ -2648,10 +2320,6 @@ def draw_ik_debug_overlay(
     base_heading_world: np.ndarray,
     top_down_waypoints_world: list[np.ndarray],
     target_approach_axis_world: np.ndarray,
-    local_tool_approach: np.ndarray,
-    local_jaw_closing: np.ndarray,
-    yaw_candidates_world: list[tuple[float, np.ndarray]],
-    candidate_result: dict[str, object],
     selection: dict[str, object],
     meters_per_unit: float,
 ) -> None:
@@ -2702,19 +2370,7 @@ def draw_ik_debug_overlay(
         np.asarray(waypoint, dtype=np.float64)
         for waypoint in top_down_waypoints_world
     ]
-    local_approach_direction = normalized_vector(
-        local_tool_approach,
-        "IK debug local tool approach",
-    )
-    local_jaw_direction = unit_perpendicular_to(
-        local_jaw_closing,
-        local_approach_direction,
-        "IK debug local jaw closing",
-    )
     axis_length = DEBUG_IK_AXIS_LENGTH_MM / 1000.0 / meters_per_unit
-    candidate_axis_length = (
-        DEBUG_IK_CANDIDATE_AXIS_LENGTH_MM / 1000.0 / meters_per_unit
-    )
 
     yellow = (1.0, 1.0, 0.0, 1.0)
     cyan = (0.0, 1.0, 1.0, 1.0)
@@ -2723,9 +2379,6 @@ def draw_ik_debug_overlay(
     green = (0.0, 1.0, 0.0, 1.0)
     blue = (0.2, 0.5, 1.0, 1.0)
     purple = (0.55, 0.2, 1.0, 1.0)
-    magenta = (1.0, 0.0, 1.0, 1.0)
-    orange = (1.0, 0.55, 0.0, 1.0)
-    gray = (0.35, 0.35, 0.35, 1.0)
 
     add_point(sphere_center_world, yellow, 18.0)
     add_point(contact_point_world, cyan, 16.0)
@@ -2764,82 +2417,29 @@ def draw_ik_debug_overlay(
             add_line(top_down_waypoints[index - 1], waypoint, green, 3.0)
     add_point(selected_sphere_grasp_point_world, red, 22.0)
 
-    selected_path = selection.get("path")
-    predicted_waypoints = None
-    if isinstance(selected_path, dict):
-        predicted_waypoints = selected_path.get(
-            "waypoint_solved_positions_world_stage_units"
-        )
-    if predicted_waypoints is not None:
-        predicted_waypoints_array = np.asarray(
-            predicted_waypoints,
-            dtype=np.float64,
-        )
-        if predicted_waypoints_array.shape != (len(top_down_waypoints), 3) or not np.all(
-            np.isfinite(predicted_waypoints_array)
-        ):
-            raise RuntimeError(
-                "Selected IK path has invalid solved waypoint positions for debug draw"
-            )
-        for index, predicted_waypoint in enumerate(predicted_waypoints_array):
-            add_point(predicted_waypoint, purple, 14.0)
-            if index:
-                add_line(
-                    predicted_waypoints_array[index - 1],
-                    predicted_waypoint,
-                    purple,
-                    3.0,
-                )
-
-    candidate_status_by_yaw: dict[float, str] = {}
-    candidates = candidate_result.get("candidates", [])
-    if isinstance(candidates, list):
-        for candidate in candidates:
-            if not isinstance(candidate, dict):
-                continue
-            if "yaw_offset_deg" not in candidate:
-                continue
-            yaw_offset_deg = float(candidate["yaw_offset_deg"])
-            if candidate.get("status") == "valid":
-                candidate_status_by_yaw[yaw_offset_deg] = "valid"
-            else:
-                candidate_status_by_yaw.setdefault(yaw_offset_deg, "rejected")
-
-    selected_yaw_deg: float | None = None
-    if (
-        selection.get("mode") == "top_down_constrained"
-        and isinstance(selected_path, dict)
-        and "yaw_offset_deg" in selected_path
+    selected_path = selection["path"]
+    assert isinstance(selected_path, dict)
+    predicted_waypoints_array = np.asarray(
+        selected_path["waypoint_solved_positions_world_stage_units"],
+        dtype=np.float64,
+    )
+    if predicted_waypoints_array.shape != (len(top_down_waypoints), 3) or not np.all(
+        np.isfinite(predicted_waypoints_array)
     ):
-        selected_yaw_deg = float(selected_path["yaw_offset_deg"])
-    selected_rotation: np.ndarray | None = None
-    hover_waypoint = top_down_waypoints[0]
-    for yaw_offset_deg, rotation in yaw_candidates_world:
-        rotation = np.asarray(rotation, dtype=np.float64)
-        desired_closing_direction = normalized_vector(
-            rotation @ local_jaw_direction,
-            f"IK debug yaw {yaw_offset_deg:.1f} closing direction",
+        raise RuntimeError(
+            "Selected IK path has invalid solved waypoint positions for debug draw"
         )
-        is_selected = (
-            selected_yaw_deg is not None
-            and math.isclose(yaw_offset_deg, selected_yaw_deg, abs_tol=1e-9)
-        )
-        if is_selected:
-            color, width = magenta, 5.0
-            selected_rotation = rotation
-        elif candidate_status_by_yaw.get(yaw_offset_deg) == "valid":
-            color, width = orange, 3.0
-        else:
-            color, width = gray, 1.0
-        add_line(
-            hover_waypoint - 0.5 * candidate_axis_length * desired_closing_direction,
-            hover_waypoint + 0.5 * candidate_axis_length * desired_closing_direction,
-            color,
-            width,
-        )
+    for index, predicted_waypoint in enumerate(predicted_waypoints_array):
+        add_point(predicted_waypoint, purple, 14.0)
+        if index:
+            add_line(
+                predicted_waypoints_array[index - 1],
+                predicted_waypoint,
+                purple,
+                3.0,
+            )
 
-    # BLUE is the selected constrained tool approach axis. Rotation about it is free,
-    # so no selected jaw-closing/yaw axis exists for the constrained solver.
+    hover_waypoint = top_down_waypoints[0]
     target_approach_direction = normalized_vector(
         target_approach_axis_world,
         "IK debug selected target approach axis",
@@ -2850,27 +2450,6 @@ def draw_ik_debug_overlay(
         blue,
         5.0,
     )
-    if selected_rotation is not None:
-        selected_approach_direction = normalized_vector(
-            selected_rotation @ local_approach_direction,
-            "IK debug selected approach direction",
-        )
-        selected_closing_direction = normalized_vector(
-            selected_rotation @ local_jaw_direction,
-            "IK debug selected closing direction",
-        )
-        add_line(
-            hover_waypoint,
-            hover_waypoint + axis_length * selected_approach_direction,
-            blue,
-            5.0,
-        )
-        add_line(
-            hover_waypoint - 0.5 * axis_length * selected_closing_direction,
-            hover_waypoint + 0.5 * axis_length * selected_closing_direction,
-            magenta,
-            5.0,
-        )
 
     draw.draw_points(points, point_colors, point_sizes)
     draw.draw_lines(line_starts, line_ends, line_colors, line_sizes)
@@ -2882,18 +2461,16 @@ def draw_ik_debug_overlay(
     print("  BLUE hover target and selected tool approach axis")
     print("  GREEN vertical desired contact-point path from hover to final target")
     print("  PURPLE forward-kinematics contact path predicted by the selected IK joints")
-    print("  MAGENTA selected yaw jaw-closing axis; ORANGE valid nonselected yaw; GRAY rejected yaw")
     for index, waypoint in enumerate(top_down_waypoints):
         print_point(
             f"  Overlay waypoint {index} ({'hover' if index == 0 else 'descent'})",
             waypoint * meters_per_unit,
         )
-    if predicted_waypoints is not None:
-        for index, predicted_waypoint in enumerate(predicted_waypoints_array):
-            print_point(
-                f"  Selected IK FK waypoint {index}",
-                predicted_waypoint * meters_per_unit,
-            )
+    for index, predicted_waypoint in enumerate(predicted_waypoints_array):
+        print_point(
+            f"  Selected IK FK waypoint {index}",
+            predicted_waypoint * meters_per_unit,
+        )
 
 
 def draw_ik_execution_residual(
@@ -3851,15 +3428,6 @@ def rotate_vector_wxyz(quaternion: np.ndarray, vector: np.ndarray) -> np.ndarray
     )
 
 
-def inverse_rotate_vector_wxyz(
-    quaternion: np.ndarray, vector: np.ndarray
-) -> np.ndarray:
-    """Express a world vector in the local frame of an Isaac quaternion."""
-    inverse_quaternion = np.asarray(quaternion, dtype=np.float64).copy()
-    inverse_quaternion[1:] *= -1.0
-    return rotate_vector_wxyz(inverse_quaternion, vector)
-
-
 def align_base_with_sphere(
     robot: Articulation,
     base_reference: XformPrim,
@@ -4031,89 +3599,6 @@ def normalized_vector(vector: np.ndarray, label: str) -> np.ndarray:
     return vector / length
 
 
-def unit_perpendicular_to(
-    vector: np.ndarray,
-    normal: np.ndarray,
-    label: str,
-) -> np.ndarray:
-    """Project ``vector`` onto the plane normal to ``normal`` and normalize."""
-    normal = normalized_vector(normal, f"{label} normal")
-    vector = np.asarray(vector, dtype=np.float64)
-    return normalized_vector(
-        vector - np.dot(vector, normal) * normal,
-        f"{label} after projection perpendicular to its approach axis",
-    )
-
-
-def make_top_down_target_rotation(
-    local_approach: np.ndarray,
-    local_closing: np.ndarray,
-    world_closing: np.ndarray,
-) -> np.ndarray:
-    """Map live tool geometry onto a down-facing, sphere-closing pose.
-
-    The temporary IK fingertip frame added in the LeRobot worker has the same
-    orientation as ``gripper_link``.  Its local axes therefore remain the
-    correct source axes for this rotation, even though its origin is moved to
-    the authored fixed-finger contact point.
-    """
-    source_z = normalized_vector(local_approach, "Local tool approach axis")
-    source_y = unit_perpendicular_to(
-        local_closing,
-        source_z,
-        "Local jaw-closing axis",
-    )
-    source_x = normalized_vector(
-        np.cross(source_y, source_z),
-        "Local top-down frame x axis",
-    )
-
-    target_z = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-    target_y = unit_perpendicular_to(
-        world_closing,
-        target_z,
-        "World jaw-closing axis",
-    )
-    target_x = normalized_vector(
-        np.cross(target_y, target_z),
-        "World top-down frame x axis",
-    )
-
-    source_basis = np.column_stack((source_x, source_y, source_z))
-    target_basis = np.column_stack((target_x, target_y, target_z))
-    rotation = target_basis @ source_basis.T
-    if not np.allclose(
-        rotation.T @ rotation,
-        np.eye(3),
-        rtol=0.0,
-        atol=1e-8,
-    ) or not np.isclose(np.linalg.det(rotation), 1.0, rtol=0.0, atol=1e-8):
-        raise RuntimeError("Constructed top-down target is not a proper rotation")
-    return rotation
-
-
-def top_down_yaw_candidates(
-    nominal_rotation: np.ndarray,
-    yaw_offsets_deg: list[float],
-) -> list[tuple[float, np.ndarray]]:
-    """Return world-Z yaw variations of a nominal top-down rotation."""
-    candidates: list[tuple[float, np.ndarray]] = []
-    for yaw_offset_deg in yaw_offsets_deg:
-        yaw_offset_rad = math.radians(yaw_offset_deg)
-        cosine = math.cos(yaw_offset_rad)
-        sine = math.sin(yaw_offset_rad)
-        world_z_rotation = np.array(
-            [
-                [cosine, -sine, 0.0],
-                [sine, cosine, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=np.float64,
-        )
-        candidates.append((yaw_offset_deg, world_z_rotation @ nominal_rotation))
-    return candidates
-
-
 def print_point(label: str, point_meters: np.ndarray) -> None:
     print(
         f"{label}: "
@@ -4190,17 +3675,6 @@ def main() -> None:
         expected_parent_link=FIXED_TOOL_PARENT_LINK,
         expected_tool_link=FIXED_TOOL_LINK,
     )
-    legacy_contact_prim = stage.GetPrimAtPath(LEGACY_CONTACT_POINT_PRIM_PATH)
-    legacy_contact_offset_m: list[float] | None = None
-    if legacy_contact_prim.IsValid():
-        legacy_translation = legacy_contact_prim.GetAttribute(
-            "xformOp:translate"
-        ).Get()
-        if legacy_translation is not None:
-            legacy_contact_offset_m = np.asarray(
-                legacy_translation,
-                dtype=np.float64,
-            ).tolist()
     record_run_section(
         "scene",
         {
@@ -4219,25 +3693,6 @@ def main() -> None:
             "position_in_parent_m": tool_model.position_in_parent_m,
             "approach_axis_in_parent": tool_model.approach_axis_in_parent,
             "closing_axis_in_parent": tool_model.closing_axis_in_parent,
-            "legacy_marker_path": LEGACY_CONTACT_POINT_PRIM_PATH,
-            "legacy_marker_present": legacy_contact_prim.IsValid(),
-            "legacy_marker_active": (
-                legacy_contact_prim.IsActive()
-                if legacy_contact_prim.IsValid()
-                else None
-            ),
-            "legacy_marker_offset_m": legacy_contact_offset_m,
-            "legacy_marker_offset_error_mm": (
-                float(
-                    np.linalg.norm(
-                        np.asarray(legacy_contact_offset_m, dtype=np.float64)
-                        - tool_model.position_in_parent_m
-                    )
-                    * 1000.0
-                )
-                if legacy_contact_offset_m is not None
-                else None
-            ),
         },
     )
 
@@ -4288,10 +3743,6 @@ def main() -> None:
     # commands advance physics. The authored contact point replaces the prior
     # mesh-derived fingertip estimate everywhere below.
     contact_point_world = contact_point.world_position_stage_units()
-    contact_point_local_stage_units = meters_to_stage(
-        tool_model.position_in_parent_m,
-        meters_per_unit,
-    )
 
     sphere_positions, _ = sphere.get_world_poses()
     sphere_center = as_numpy(sphere_positions)[0]
@@ -4308,32 +3759,12 @@ def main() -> None:
         sphere_grasp_points,
         contact_point_world,
     )
-    sphere_grasp_point = offset_outward_from_sphere(
+    nominal_approach_point = offset_outward_from_sphere(
         sphere_center,
         sphere_surface_grasp_point,
         ARGS.sphere_surface_clearance_mm / 1000.0 / meters_per_unit,
     )
 
-    # Build the requested top-down pose and vertical contact-point path from
-    # the live gripper geometry.
-    local_tool_approach = tool_model.approach_axis_in_parent
-    local_jaw_closing = tool_model.closing_axis_in_parent
-    world_jaw_closing = sphere_center - sphere_surface_grasp_point
-    nominal_top_down_rotation = make_top_down_target_rotation(
-        local_approach=local_tool_approach,
-        local_closing=local_jaw_closing,
-        world_closing=world_jaw_closing,
-    )
-    yaw_candidates = top_down_yaw_candidates(
-        nominal_top_down_rotation,
-        ARGS.top_down_yaw_offsets_deg,
-    )
-    top_down_waypoints = vertical_approach_waypoints(
-        final_target_world_stage_units=sphere_grasp_point,
-        meters_per_unit=meters_per_unit,
-        hover_height_mm=ARGS.top_down_hover_height_mm,
-        descent_step_mm=ARGS.top_down_descent_step_mm,
-    )
     grasp_candidates = generate_sphere_grasp_candidates(
         sphere_center,
         sphere_radius,
@@ -4360,15 +3791,16 @@ def main() -> None:
             "selected_surface_point_world_m": (
                 sphere_surface_grasp_point * meters_per_unit
             ),
-            "approach_target_world_m": sphere_grasp_point * meters_per_unit,
+            "nominal_approach_target_world_m": (
+                nominal_approach_point * meters_per_unit
+            ),
             "sphere_surface_clearance_mm": (
                 ARGS.sphere_surface_clearance_mm
             ),
-            "hover_target_world_m": top_down_waypoints[0] * meters_per_unit,
-            "waypoint_count": len(top_down_waypoints),
-            "local_tool_approach": local_tool_approach,
-            "local_jaw_closing": local_jaw_closing,
-            "nominal_top_down_rotation": nominal_top_down_rotation,
+            "candidate_count": len(grasp_candidates),
+            "waypoint_count": len(
+                grasp_candidates[0]["waypoints_world_stage_units"]
+            ),
         },
     )
 
@@ -4392,33 +3824,16 @@ def main() -> None:
     )
     print_point(
         f"IK approach point ({ARGS.sphere_surface_clearance_mm:.1f} mm clearance, world)",
-        sphere_grasp_point * meters_per_unit,
+        nominal_approach_point * meters_per_unit,
     )
     print()
     print("Prepared top-down IK geometry:")
+    print("  Candidate approach axes: near vertical, sampled about the sphere")
     print(
-        "  Local approach axis: "
-        f"{normalized_vector(local_tool_approach, 'Local tool approach axis').tolist()}"
-    )
-    print(
-        "  Local jaw-closing axis: "
-        f"{unit_perpendicular_to(local_jaw_closing, local_tool_approach, 'Local jaw-closing axis').tolist()}"
-    )
-    print(
-        "  Nominal target rotation (world from gripper_link): "
-        f"{nominal_top_down_rotation.tolist()}"
-    )
-    print("  Constrained approach axis: tool +Z aligned to each sampled axis")
-    print("  Tool yaw: unconstrained")
-    print(
-        "  Vertical waypoints: "
-        f"{len(top_down_waypoints)} "
+        "  Candidate vertical waypoints: "
+        f"{len(grasp_candidates[0]['waypoints_world_stage_units'])} "
         f"(hover={ARGS.top_down_hover_height_mm:.1f} mm, "
         f"max spacing={ARGS.top_down_descent_step_mm:.1f} mm)"
-    )
-    print_point(
-        "  Hover contact target (world)",
-        top_down_waypoints[0] * meters_per_unit,
     )
 
     # Calculate, gate, and rank all sampled grasp paths before issuing motion.
@@ -4427,13 +3842,12 @@ def main() -> None:
         stage=stage,
         robot=robot,
         base_link=base_link,
-        fingertip_offset_stage_units=contact_point_local_stage_units,
+        fingertip_offset_m=tool_model.position_in_parent_m,
         grasp_candidates_world=grasp_candidates,
         meters_per_unit=meters_per_unit,
     )
     candidates = top_down_candidate_result["candidates"]
     assert isinstance(candidates, list)
-    fallback = top_down_candidate_result.get("position_only_fallback")
     record_run_section(
         "approach_planning",
         {
@@ -4462,14 +3876,6 @@ def main() -> None:
             "worker_duration_seconds": top_down_candidate_result.get(
                 "worker_duration_seconds"
             ),
-            "fallback_status": (
-                fallback.get("status") if isinstance(fallback, dict) else None
-            ),
-            "fallback_max_position_error_mm": (
-                float(fallback["max_position_error_m"]) * 1000.0
-                if isinstance(fallback, dict) and "max_position_error_m" in fallback
-                else None
-            ),
             "candidates": [
                 {
                     key: candidate[key]
@@ -4480,10 +3886,8 @@ def main() -> None:
                         "endpoint_rank",
                         "constraint_mode",
                         "candidate_id",
-                        "target_kind",
                         "surface_offset_deg",
                         "approach_tilt_deg",
-                        "surface_clearance_m",
                         "failed_waypoint_index",
                         "reason",
                         "position_seed_diagnostics",
@@ -4521,10 +3925,8 @@ def main() -> None:
             "status",
             "constraint_mode",
             "candidate_id",
-            "target_kind",
             "surface_offset_deg",
             "approach_tilt_deg",
-            "surface_clearance_m",
             "position_tolerance_m",
             "axis_tolerance_rad",
             "max_position_error_m",
@@ -4583,10 +3985,6 @@ def main() -> None:
         target_approach_axis_world=np.asarray(
             selected_candidate_spec["target_axis_world"], dtype=np.float64
         ),
-        local_tool_approach=local_tool_approach,
-        local_jaw_closing=local_jaw_closing,
-        yaw_candidates_world=yaw_candidates,
-        candidate_result=top_down_candidate_result,
         selection=top_down_selection,
         meters_per_unit=meters_per_unit,
     )
@@ -4659,7 +4057,7 @@ def main() -> None:
         stage=stage,
         robot=robot,
         base_link=base_link,
-        fingertip_offset_stage_units=contact_point_local_stage_units,
+        fingertip_offset_m=tool_model.position_in_parent_m,
         target_world_stage_units=lift_target_world,
         meters_per_unit=meters_per_unit,
     )

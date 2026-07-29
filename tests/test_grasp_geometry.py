@@ -45,23 +45,16 @@ class GraspGeometryTests(unittest.TestCase):
                 float(np.linalg.norm(candidate["target_axis_world"])),
                 1.0,
             )
+            self.assertAlmostEqual(
+                float(np.linalg.norm(candidate["target_closing_axis_world"])),
+                1.0,
+            )
             self.assertEqual(len(candidate["waypoints_world_stage_units"]), 3)
-            surface_point = np.asarray(
-                candidate["surface_point_world_stage_units"]
-            )
-            approach_point = np.asarray(
-                candidate["approach_point_world_stage_units"]
-            )
             waypoints = np.asarray(candidate["waypoints_world_stage_units"])
             self.assertAlmostEqual(
-                float(np.linalg.norm(surface_point[:2])),
-                0.025,
-            )
-            self.assertAlmostEqual(
-                float(np.linalg.norm(approach_point[:2])),
+                float(np.linalg.norm(waypoints[-1, :2])),
                 0.030,
             )
-            np.testing.assert_allclose(waypoints[-1], approach_point)
             np.testing.assert_allclose(
                 np.linalg.norm(waypoints[:, :2], axis=1),
                 0.030,

@@ -123,11 +123,6 @@ def generate_sphere_grasp_candidates(
                     "candidate_id": candidate_id,
                     "surface_offset_deg": surface_offset_deg,
                     "approach_tilt_deg": approach_tilt_deg,
-                    "target_kind": "fixed_finger_surface_vertical_approach",
-                    "surface_point_world_stage_units": surface_point.copy(),
-                    "approach_point_world_stage_units": approach_point.copy(),
-                    "grasp_center_world_stage_units": approach_point.copy(),
-                    "surface_clearance_m": clearance_m,
                     "target_axis_world": target_axis_world,
                     "target_closing_axis_world": inward,
                     "waypoints_world_stage_units": vertical_approach_waypoints(

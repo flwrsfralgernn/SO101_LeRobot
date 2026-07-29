@@ -23,7 +23,6 @@ from scripts.ik.kinematics_utils import (
     rotation_matrix_wxyz,
     stage_to_meters,
     transform_point,
-    world_rotation_in_frame,
     world_stage_point_in_frame_meters,
 )
 from scripts.ik.tool_model import fixed_tool_model_from_urdf
@@ -119,21 +118,6 @@ class FrameTransformTests(unittest.TestCase):
                 0.01,
             ),
             local_point_m,
-            atol=1e-12,
-        )
-
-    def test_world_rotation_is_expressed_in_local_frame(self) -> None:
-        world_from_frame = make_transform(
-            [4.0, 5.0, 6.0],
-            rotation_matrix_rpy([0.0, 0.0, math.pi / 2.0]),
-        )
-        world_from_tool = rotation_matrix_rpy([0.0, 0.0, math.pi])
-        expected_frame_from_tool = rotation_matrix_rpy(
-            [0.0, 0.0, math.pi / 2.0]
-        )
-        np.testing.assert_allclose(
-            world_rotation_in_frame(world_from_tool, world_from_frame),
-            expected_frame_from_tool,
             atol=1e-12,
         )
 
