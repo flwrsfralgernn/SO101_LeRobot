@@ -503,7 +503,16 @@ def lerobot_worker_main() -> int:
                 if best_state is not None
                 else None
             ),
+            "best_solved_position_m": (
+                best_state["solved_position_m"]
+                if best_state is not None
+                else None
+            ),
+            "best_joints_deg": (
+                best_state["joints_deg"] if best_state is not None else None
+            ),
             "joint_limit_failures": last_joint_limit_failures,
+            "rejection_reason": rejection_reason,
         }
         return None, rejection_reason
 
@@ -524,6 +533,7 @@ def lerobot_worker_main() -> int:
         joints_deg = seed_joints_deg.copy()
         best_state: dict[str, object] | None = None
         rejection_reason = "No valid position-only state was produced"
+        last_joint_limit_failures: list[str] = []
 
         for iteration in range(1, max_iterations + 1):
             joints_deg = worker_np.asarray(
@@ -538,13 +548,18 @@ def lerobot_worker_main() -> int:
             if not worker_np.all(worker_np.isfinite(joints_deg)):
                 rejection_reason = "Position-only IK returned NaN or infinity"
                 break
-            if joint_limit_violations(
+            violations = joint_limit_violations(
                 joints_deg,
                 lower_joint_limits_deg,
                 upper_joint_limits_deg,
                 ARM_JOINT_NAMES,
-            ):
-                rejection_reason = "Position-only IK violated arm joint limits"
+            )
+            if violations:
+                last_joint_limit_failures = list(violations)
+                rejection_reason = (
+                    "Position-only IK violated arm joint limits: "
+                    f"{violations}"
+                )
                 continue
             solved_pose = worker_np.asarray(
                 checked_fk(kinematics, joints_deg),
@@ -573,6 +588,11 @@ def lerobot_worker_main() -> int:
 
         if best_state is not None:
             return best_state, None
+        if last_joint_limit_failures:
+            rejection_reason = (
+                f"{rejection_reason}; "
+                f"last_joint_limit_failures={last_joint_limit_failures}"
+            )
         return None, rejection_reason
 
     def evaluate_position_axis_path(
@@ -901,6 +921,14 @@ def lerobot_worker_main() -> int:
                     candidates.append(candidate)
                     continue
                 position_seed_iterations += int(position_seed["iterations"])
+                position_seed_diagnostics = {
+                    "iterations": int(position_seed["iterations"]),
+                    "position_error_m": float(
+                        position_seed["position_error_m"]
+                    ),
+                    "solved_position_m": position_seed["solved_position_m"],
+                    "joints_deg": position_seed["joints_deg"],
+                }
                 endpoint_state, endpoint_reason = solve_position_axis_waypoint(
                     worker_np.asarray(
                         position_seed["joints_deg"], dtype=worker_np.float64
@@ -929,6 +957,9 @@ def lerobot_worker_main() -> int:
                             "position_seed_iterations": position_seed[
                                 "iterations"
                             ],
+                            "position_seed_diagnostics": (
+                                position_seed_diagnostics
+                            ),
                             "endpoint_diagnostics": dict(
                                 solver_context.last_solve_diagnostics
                             ),
@@ -942,6 +973,7 @@ def lerobot_worker_main() -> int:
                         "status": "endpoint_valid",
                         "rejection_stage": None,
                         "position_seed_iterations": position_seed["iterations"],
+                        "position_seed_diagnostics": position_seed_diagnostics,
                         "endpoint_iterations": endpoint_state["iterations"],
                         "endpoint_joints_deg": endpoint_state["joints_deg"],
                         "endpoint_position_error_m": endpoint_state[
@@ -2100,6 +2132,27 @@ def calculate_top_down_candidates(
         f"position <= {ARGS.top_down_position_tolerance_mm:.3f} mm, "
         f"axis <= {ARGS.top_down_axis_tolerance_deg:.3f} deg"
     )
+    endpoint_targets_m = np.asarray(
+        [waypoints[-1] for waypoints in candidate_waypoint_positions_m],
+        dtype=np.float64,
+    )
+    endpoint_distances_m = np.linalg.norm(endpoint_targets_m, axis=1)
+    print(
+        "  Endpoint target envelope in LeRobot base frame: "
+        f"x=[{endpoint_targets_m[:, 0].min():.4f}, "
+        f"{endpoint_targets_m[:, 0].max():.4f}] m, "
+        f"y=[{endpoint_targets_m[:, 1].min():.4f}, "
+        f"{endpoint_targets_m[:, 1].max():.4f}] m, "
+        f"z=[{endpoint_targets_m[:, 2].min():.4f}, "
+        f"{endpoint_targets_m[:, 2].max():.4f}] m, "
+        f"distance-from-base=[{endpoint_distances_m.min():.4f}, "
+        f"{endpoint_distances_m.max():.4f}] m"
+    )
+    print(
+        "  Dispatching constrained candidate batch to LeRobot worker...",
+        flush=True,
+    )
+    worker_started = time.perf_counter()
     result = run_lerobot_worker(
         {
             "operation": "grasp_candidates",
@@ -2129,26 +2182,74 @@ def calculate_top_down_candidates(
             "seed_regularization_weight": IK_SEED_REGULARIZATION_WEIGHT,
         }
     )
+    worker_duration_seconds = time.perf_counter() - worker_started
+    print(
+        "  LeRobot worker returned candidate batch in "
+        f"{worker_duration_seconds:.3f} s."
+    )
+    result["worker_duration_seconds"] = worker_duration_seconds
+    if result.get("status") != "generated":
+        raise RuntimeError(
+            "Constrained candidate worker returned an unexpected status: "
+            f"{result.get('status')!r}"
+        )
     paths: list[object] = []
     candidates = result.get("candidates")
     if isinstance(candidates, list):
         paths.extend(candidates)
+    if len(paths) != len(grasp_candidates_world):
+        raise RuntimeError(
+            "Constrained candidate worker returned the wrong number of "
+            f"candidates: expected={len(grasp_candidates_world)}, "
+            f"received={len(paths)}"
+        )
+    expected_candidate_ids = [
+        candidate["candidate_id"] for candidate in grasp_candidates_world
+    ]
+    returned_candidate_ids = [
+        path.get("candidate_id") if isinstance(path, dict) else None
+        for path in paths
+    ]
+    if sorted(returned_candidate_ids, key=str) != sorted(
+        expected_candidate_ids, key=str
+    ):
+        raise RuntimeError(
+            "Constrained candidate worker returned missing or duplicate "
+            "candidate IDs: "
+            f"expected={expected_candidate_ids}, "
+            f"received={returned_candidate_ids}"
+        )
+    expected_shape = (len(candidate_waypoint_positions_m[0]), 3)
     for path in paths:
-        if not isinstance(path, dict) or path.get("status") != "valid":
+        if not isinstance(path, dict):
+            raise RuntimeError("LeRobot candidate result is not a mapping")
+        waypoint_targets_m = np.asarray(
+            path.get("waypoint_target_positions_m"), dtype=np.float64
+        )
+        if (
+            waypoint_targets_m.shape != expected_shape
+            or not np.all(np.isfinite(waypoint_targets_m))
+        ):
+            raise RuntimeError(
+                "LeRobot candidate is missing valid target waypoint positions"
+            )
+        path["waypoint_target_positions_world_stage_units"] = [
+            lerobot_base_point_in_world(
+                target_position_m,
+                world_from_lerobot_base,
+                meters_per_unit,
+            ).tolist()
+            for target_position_m in waypoint_targets_m
+        ]
+        if path.get("status") != "valid":
             continue
         solved_positions_m = np.asarray(
             path.get("waypoint_solved_positions_m"),
             dtype=np.float64,
         )
-        waypoint_targets_m = np.asarray(
-            path.get("waypoint_target_positions_m"), dtype=np.float64
-        )
-        expected_shape = (len(candidate_waypoint_positions_m[0]), 3)
         if (
             solved_positions_m.shape != expected_shape
             or not np.all(np.isfinite(solved_positions_m))
-            or waypoint_targets_m.shape != expected_shape
-            or not np.all(np.isfinite(waypoint_targets_m))
         ):
             raise RuntimeError(
                 "LeRobot candidate is missing valid solved waypoint positions"
@@ -2160,14 +2261,6 @@ def calculate_top_down_candidates(
                 meters_per_unit,
             ).tolist()
             for solved_position_m in solved_positions_m
-        ]
-        path["waypoint_target_positions_world_stage_units"] = [
-            lerobot_base_point_in_world(
-                target_position_m,
-                world_from_lerobot_base,
-                meters_per_unit,
-            ).tolist()
-            for target_position_m in waypoint_targets_m
         ]
         solved_rotations = np.asarray(
             path.get("waypoint_solved_rotations"), dtype=np.float64
@@ -2280,6 +2373,12 @@ def select_top_down_path(
         for candidate in candidates
         if isinstance(candidate, dict) and candidate.get("status") == "rejected"
     ]
+    print()
+    print(
+        "[CONSTRAINED TOP-DOWN PATH NOT SELECTED] "
+        "No candidate passed every gate; approach motion is intentionally "
+        "not issued."
+    )
     raise RuntimeError(
         "No sampled grasp candidate passes the position, approach-axis, "
         "jaw-axis, and joint-limit gates before motion: "
@@ -2288,35 +2387,188 @@ def select_top_down_path(
     )
 
 
-def print_top_down_candidate_selection(
+def _format_solver_diagnostics(diagnostics: object) -> str:
+    """Format the worker's best state so rejected branches are actionable."""
+    if not isinstance(diagnostics, dict):
+        return "solver diagnostics were not returned"
+
+    parts: list[str] = []
+    position_error_m = diagnostics.get("position_error_m")
+    if isinstance(position_error_m, (float, int)) and math.isfinite(
+        position_error_m
+    ):
+        parts.append(f"best-position={position_error_m * 1000.0:.3f} mm")
+    axis_error_rad = diagnostics.get("axis_error_rad")
+    if isinstance(axis_error_rad, (float, int)) and math.isfinite(axis_error_rad):
+        parts.append(f"best-axis={math.degrees(axis_error_rad):.3f} deg")
+    closing_axis_error_rad = diagnostics.get("closing_axis_error_rad")
+    if isinstance(closing_axis_error_rad, (float, int)) and math.isfinite(
+        closing_axis_error_rad
+    ):
+        parts.append(
+            "best-closing-axis="
+            f"{math.degrees(closing_axis_error_rad):.3f} deg"
+        )
+    solved_position_m = diagnostics.get("best_solved_position_m")
+    if isinstance(solved_position_m, list) and len(solved_position_m) == 3:
+        parts.append(
+            "best-tcp-base=("
+            + ", ".join(f"{float(value):.4f}" for value in solved_position_m)
+            + ") m"
+        )
+    best_joints_deg = diagnostics.get("best_joints_deg")
+    if isinstance(best_joints_deg, list):
+        parts.append(
+            "best-joints-deg=["
+            + ", ".join(f"{float(value):.2f}" for value in best_joints_deg)
+            + "]"
+        )
+    joint_limit_failures = diagnostics.get("joint_limit_failures")
+    if isinstance(joint_limit_failures, list) and joint_limit_failures:
+        parts.append(f"joint-limits={joint_limit_failures}")
+    rejection_reason = diagnostics.get("rejection_reason")
+    if isinstance(rejection_reason, str) and rejection_reason:
+        parts.append(f"solver-reason={rejection_reason}")
+    return "; ".join(parts) if parts else "no finite solver state"
+
+
+def _format_position_seed_diagnostics(diagnostics: object) -> str:
+    """Format the position-only endpoint result used to seed constrained IK."""
+    if not isinstance(diagnostics, dict):
+        return "position seed unavailable"
+    position_error_m = diagnostics.get("position_error_m")
+    solved_position_m = diagnostics.get("solved_position_m")
+    joints_deg = diagnostics.get("joints_deg")
+    parts: list[str] = []
+    if isinstance(position_error_m, (float, int)) and math.isfinite(
+        position_error_m
+    ):
+        parts.append(f"residual={position_error_m * 1000.0:.3f} mm")
+    if isinstance(solved_position_m, list) and len(solved_position_m) == 3:
+        parts.append(
+            "tcp-base=("
+            + ", ".join(f"{float(value):.4f}" for value in solved_position_m)
+            + ") m"
+        )
+    if isinstance(joints_deg, list):
+        parts.append(
+            "joints-deg=["
+            + ", ".join(f"{float(value):.2f}" for value in joints_deg)
+            + "]"
+        )
+    iterations = diagnostics.get("iterations")
+    if isinstance(iterations, int):
+        parts.append(f"iterations={iterations}")
+    return "; ".join(parts) if parts else "position seed unavailable"
+
+
+def print_top_down_candidate_diagnostics(
     candidate_result: dict[str, object],
-    selection: dict[str, object],
 ) -> None:
-    """Print compact branch diagnostics and the path selected for Step 4."""
+    """Print every candidate result before selection can abort the run."""
     candidates = candidate_result["candidates"]
     assert isinstance(candidates, list)
     print()
     print("Constrained top-down IK result:")
+    status_counts: dict[str, int] = {}
+    best_rejected_position_error_m: float | None = None
     for index, candidate in enumerate(candidates, start=1):
         assert isinstance(candidate, dict)
-        status = candidate["status"]
-        if status == "rejected":
-            print(
-                f"  #{index:02d}: id={candidate['candidate_id']}, "
-                f"rejected-at={candidate.get('rejection_stage', 'unknown')}, "
-                f"reason={candidate['reason']}"
+        status = str(candidate.get("status", "missing"))
+        status_counts[status] = status_counts.get(status, 0) + 1
+        target_positions_m = candidate.get("waypoint_target_positions_m")
+        terminal_target = None
+        if isinstance(target_positions_m, list) and target_positions_m:
+            terminal_target = target_positions_m[-1]
+        target_summary = ""
+        if isinstance(terminal_target, list) and len(terminal_target) == 3:
+            terminal_target_array = np.asarray(
+                terminal_target, dtype=np.float64
             )
+            target_summary = (
+                ", target-tcp-base=("
+                f"{terminal_target_array[0]:.4f}, "
+                f"{terminal_target_array[1]:.4f}, "
+                f"{terminal_target_array[2]:.4f}) m, "
+                f"distance={np.linalg.norm(terminal_target_array):.4f} m"
+            )
+        candidate_label = (
+            f"  #{index:02d}: id={candidate.get('candidate_id')}, "
+            f"surface-offset={candidate.get('surface_offset_deg')} deg, "
+            f"tilt={candidate.get('approach_tilt_deg')} deg"
+        )
+        if status == "rejected":
+            failed_waypoint_summary = ""
+            failed_waypoint_index = candidate.get("failed_waypoint_index")
+            if (
+                isinstance(failed_waypoint_index, int)
+                and isinstance(target_positions_m, list)
+                and 0 <= failed_waypoint_index < len(target_positions_m)
+            ):
+                failed_target = np.asarray(
+                    target_positions_m[failed_waypoint_index],
+                    dtype=np.float64,
+                )
+                failed_waypoint_summary = (
+                    ", failed-waypoint="
+                    f"{failed_waypoint_index}, failed-target-base=("
+                    f"{failed_target[0]:.4f}, {failed_target[1]:.4f}, "
+                    f"{failed_target[2]:.4f}) m"
+                )
+            print(
+                candidate_label
+                + target_summary
+                + failed_waypoint_summary
+                + ", "
+                f"rejected-at={candidate.get('rejection_stage', 'unknown')}, "
+                f"reason={candidate.get('reason', 'not supplied')}"
+            )
+            print(
+                "       position-only seed: "
+                f"{_format_position_seed_diagnostics(candidate.get('position_seed_diagnostics'))}"
+            )
+            diagnostics = candidate.get("endpoint_diagnostics")
+            if not isinstance(diagnostics, dict):
+                diagnostics = candidate.get("failed_waypoint_diagnostics")
+            print(
+                "       constrained solver: "
+                f"{_format_solver_diagnostics(diagnostics)}"
+            )
+            if isinstance(diagnostics, dict):
+                position_error_m = diagnostics.get("position_error_m")
+                if isinstance(position_error_m, (float, int)) and math.isfinite(
+                    position_error_m
+                ):
+                    best_rejected_position_error_m = min(
+                        best_rejected_position_error_m
+                        if best_rejected_position_error_m is not None
+                        else float("inf"),
+                        float(position_error_m),
+                    )
             continue
         if status == "skipped":
             print(
-                f"  #{index:02d}: id={candidate['candidate_id']}, "
-                f"status=skipped, rank={candidate.get('endpoint_rank')}, "
+                candidate_label
+                + target_summary
+                + ", "
+                f"status=skipped, endpoint-rank={candidate.get('endpoint_rank')}, "
                 f"reason={candidate.get('skip_reason')}"
             )
             continue
+        if status != "valid":
+            print(
+                candidate_label
+                + target_summary
+                + ", "
+                + f"status={status}, "
+                f"reason={candidate.get('reason', 'unexpected candidate status')}"
+            )
+            continue
         print(
-            f"  #{index:02d}: id={candidate['candidate_id']}, "
-            "status=valid, "
+            candidate_label
+            + target_summary
+            + ", "
+            + f"status={status}, "
             f"terminal-position={float(candidate['terminal_position_error_m']) * 1000.0:.3f} mm, "
             f"terminal-axis={math.degrees(float(candidate['terminal_axis_error_rad'])):.3f} deg, "
             f"max-position={float(candidate['max_position_error_m']) * 1000.0:.3f} mm, "
@@ -2324,6 +2576,27 @@ def print_top_down_candidate_selection(
             f"closing-axis={math.degrees(float(candidate['terminal_closing_axis_error_rad'])):.3f} deg, "
             f"travel={float(candidate['total_joint_travel_deg']):.3f} deg"
         )
+
+    print(
+        "  Candidate status counts: "
+        + ", ".join(
+            f"{status}={count}" for status, count in sorted(status_counts.items())
+        )
+    )
+    if not status_counts.get("valid", 0):
+        if best_rejected_position_error_m is not None:
+            print(
+                "  Reachability clue: the closest rejected constrained "
+                "endpoint still had a TCP position residual of "
+                f"{best_rejected_position_error_m * 1000.0:.3f} mm "
+                f"(gate={ARGS.top_down_position_tolerance_mm:.3f} mm)."
+            )
+        else:
+            print(
+                "  Reachability clue: no candidate reached a finite "
+                "in-limit constrained endpoint; inspect the per-candidate "
+                "joint-limit and solver reasons above."
+            )
 
     planning_metrics = candidate_result.get("planning_metrics")
     if isinstance(planning_metrics, dict):
@@ -2348,6 +2621,12 @@ def print_top_down_candidate_selection(
                 "  Position-only fallback: status=valid, "
                 f"max-position={float(fallback['max_position_error_m']) * 1000.0:.3f} mm"
             )
+
+
+def print_top_down_candidate_selection(
+    selection: dict[str, object],
+) -> None:
+    """Print the selected branch after its candidate diagnostics."""
 
     selected_path = selection["path"]
     assert isinstance(selected_path, dict)
@@ -4180,6 +4459,9 @@ def main() -> None:
             "planning_metrics": top_down_candidate_result.get(
                 "planning_metrics"
             ),
+            "worker_duration_seconds": top_down_candidate_result.get(
+                "worker_duration_seconds"
+            ),
             "fallback_status": (
                 fallback.get("status") if isinstance(fallback, dict) else None
             ),
@@ -4204,6 +4486,7 @@ def main() -> None:
                         "surface_clearance_m",
                         "failed_waypoint_index",
                         "reason",
+                        "position_seed_diagnostics",
                         "endpoint_diagnostics",
                         "failed_waypoint_diagnostics",
                         "position_tolerance_m",
@@ -4228,6 +4511,7 @@ def main() -> None:
             ],
         },
     )
+    print_top_down_candidate_diagnostics(top_down_candidate_result)
     top_down_selection = select_top_down_path(top_down_candidate_result)
     selected_path = top_down_selection["path"]
     assert isinstance(selected_path, dict)
@@ -4287,10 +4571,7 @@ def main() -> None:
             ],
         },
     )
-    print_top_down_candidate_selection(
-        top_down_candidate_result,
-        top_down_selection,
-    )
+    print_top_down_candidate_selection(top_down_selection)
 
     draw_ik_debug_overlay(
         sphere_center_world=sphere_center,
